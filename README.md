@@ -3,6 +3,7 @@ A really simple mask cleaning plugin for AviSynth based on mt_hysteresis. It dis
 
 ## Example usage ##
 ```tmc.TMaskCleaner(clip, length=5, thresh=235, fade=0)```
+
 Original plugin works only with 8 bit input (and only Y plane). My port should support 10-16 bit as well (only plane 0 will be processed, 1 and 2 will be copied).
 
 ### License ###
