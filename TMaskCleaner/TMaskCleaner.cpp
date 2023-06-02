@@ -5,6 +5,7 @@
 #include <vector>
 #include <VapourSynth.h>
 #include <VSHelper.h>
+#include <string>
 
 typedef std::pair<int, int> Coordinates;
 
