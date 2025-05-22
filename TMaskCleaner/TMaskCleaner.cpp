@@ -1,17 +1,16 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
-#include <stdint.h>
 #include <memory>
 #include <vector>
-#include <VapourSynth.h>
-#include <VSHelper.h>
+#include "VapourSynth4.h"
+#include "VSHelper4.h"
 #include <string>
 
 typedef std::pair<int, int> Coordinates;
 
 struct TMCData {
-    VSNodeRef * node;
-    VSVideoInfo vi;
+    VSNode * node;
+    const VSVideoInfo * vi;
     unsigned int length;
     unsigned int thresh;
     unsigned int fade;
@@ -39,21 +38,23 @@ void visit(int x, int y, int width, pixel_t *lookup, int bits) {
 }
 
 template<typename pixel_t>
-void process_c(const VSFrameRef * src, VSFrameRef * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
+void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
     pixel_t *VS_RESTRICT dstptr = reinterpret_cast<pixel_t *>(vsapi->getWritePtr(dst, 0));
     const int srcStride = vsapi->getStride(src, 0) / sizeof(pixel_t);
     const int dstStride = vsapi->getStride(dst, 0) / sizeof(pixel_t);
+    int height = vsapi->getFrameHeight(src, 0);
+    int width = vsapi->getFrameWidth(src, 0);
     memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * vsapi->getFrameHeight(dst, 0));
-    pixel_t *lookup = new pixel_t[d->vi.height * d->vi.width / bits];
-    memset(lookup, 0, d->vi.height * (d->vi.width * sizeof(pixel_t)) / bits);
+    pixel_t *lookup = new pixel_t[height * width / bits];
+    memset(lookup, 0, height * (width * sizeof(pixel_t)) / bits);
 
     std::vector<Coordinates> coordinates;
     std::vector<Coordinates> white_pixels;
 
-    for (int y = 0; y < d->vi.height; ++y) {
-        for (int x = 0; x < d->vi.width; ++x) {
-            if (visited<pixel_t>(x, y, d->vi.width, lookup, bits) || !is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (visited<pixel_t>(x, y, width, lookup, bits) || !is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
                 continue;
             }
             coordinates.clear();
@@ -68,16 +69,16 @@ void process_c(const VSFrameRef * src, VSFrameRef * dst, int bits, const TMCData
 
                 /* check surrounding positions */
                 int x_min = current.first == 0 ? 0 : current.first - 1;
-                int x_max = current.first == d->vi.width - 1 ? d->vi.width : current.first + 2;
+                int x_max = current.first == width - 1 ? width : current.first + 2;
                 int y_min = current.second == 0 ? 0 : current.second - 1;
-                int y_max = current.second == d->vi.height - 1 ? d->vi.height : current.second + 2;
+                int y_max = current.second == height - 1 ? height : current.second + 2;
 
                 for (int j = y_min; j < y_max; ++j) {
                     for (int i = x_min; i < x_max; ++i) {
-                        if (!visited<pixel_t>(i, j, d->vi.width, lookup, bits) && is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+                        if (!visited<pixel_t>(i, j, width, lookup, bits) && is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
                             coordinates.emplace_back(i, j);
                             white_pixels.emplace_back(i, j);
-                            visit<pixel_t>(i, j, d->vi.width, lookup, bits);
+                            visit<pixel_t>(i, j, width, lookup, bits);
                         }
                     }
                 }
@@ -100,13 +101,8 @@ void process_c(const VSFrameRef * src, VSFrameRef * dst, int bits, const TMCData
     delete[] lookup;
 }
 
-static void VS_CC TMСInit(VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi) {
-    TMCData * d = static_cast<TMCData *>(*instanceData);
-    vsapi->setVideoInfo(&d->vi, 1, node);
-}
-
-static const VSFrameRef *VS_CC TMСGetFrame(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
-    TMCData * d = static_cast<TMCData *>(*instanceData);
+static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi) {
+    TMCData * d = static_cast<TMCData *>(instanceData);
 
     if (activationReason == arInitial) {
         vsapi->requestFrameFilter(n, d->node, frameCtx);
@@ -115,14 +111,16 @@ static const VSFrameRef *VS_CC TMСGetFrame(int n, int activationReason, void **
 #ifdef VS_TARGET_CPU_X86
         no_subnormals();
 #endif
-        const VSFrameRef * src = vsapi->getFrameFilter(n, d->node, frameCtx);
-        const VSFrameRef * fr[] = { nullptr, src, src };
-        const int pl[] = { 0, 1, 2 };
-        VSFrameRef * dst = vsapi->newVideoFrame2(d->vi.format, d->vi.width, d->vi.height, fr, pl, src, core);
-        int bits = d->vi.format->bitsPerSample;
-        if (d->vi.format->bytesPerSample == 1) {
+        const VSFrame* src = vsapi->getFrameFilter(n, d->node, frameCtx);
+        const VSVideoFormat* fi = vsapi->getVideoFrameFormat(src);
+        int height = vsapi->getFrameHeight(src, 0);
+        int width = vsapi->getFrameWidth(src, 0);
+        VSFrame* dst = vsapi->newVideoFrame(fi, width, height, src, core);
+        int bits = d->vi->format.bitsPerSample;
+
+        if (d->vi->format.bytesPerSample == 1) {
             process_c<uint8_t>(src, dst, bits, d, vsapi);
-        } else if(d->vi.format->bytesPerSample == 2) {
+        } else if (d->vi->format.bytesPerSample == 2) {
             process_c<uint16_t>(src, dst, bits, d, vsapi);
         }
         vsapi->freeFrame(src);
@@ -131,56 +129,60 @@ static const VSFrameRef *VS_CC TMСGetFrame(int n, int activationReason, void **
     return nullptr;
 }
 
-static void VS_CC TMСFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
-    TMCData * d = static_cast<TMCData *>(instanceData);
+static void VS_CC TMCFree(void *instanceData, VSCore *core, const VSAPI *vsapi) {
+    auto d{ static_cast<TMCData *>(instanceData) };
     vsapi->freeNode(d->node);
     delete d;
 }
 
 void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
-    std::unique_ptr<TMCData> d{ new TMCData{} };
-    int err;
+    auto d{ std::make_unique<TMCData>() };
+    int err{ 0 };
 
-    d->node = vsapi->propGetNode(in, "clip", 0, nullptr);
-    d->vi = *vsapi->getVideoInfo(d->node);
+    d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
+    d->vi = vsapi->getVideoInfo(d->node);
 
     try {
-        if (!isConstantFormat(&d->vi) || (d->vi.format->sampleType == stInteger && d->vi.format->bitsPerSample > 16) || (d->vi.format->sampleType == stFloat))
-            throw std::string{ "TMaskCleaner: only constant format 8-16 bits integer input supported." };
+        if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
+            throw std::string("TMaskCleaner: only constant format 8-16 bits integer input supported.");
 
-        d->length = static_cast<float>(vsapi->propGetInt(in, "length", 0, &err));
+        d->length = static_cast<float>(vsapi->mapGetInt(in, "length", 0, &err));
         if (err)
             d->length = 5;
 
-        d->thresh = static_cast<float>(vsapi->propGetInt(in, "thresh", 0, &err));
+        d->thresh = static_cast<float>(vsapi->mapGetInt(in, "thresh", 0, &err));
         if (err)
             d->thresh = 235;
 
-        d->fade = static_cast<float>(vsapi->propGetInt(in, "fade", 0, &err));
+        d->fade = static_cast<float>(vsapi->mapGetInt(in, "fade", 0, &err));
         if (err)
             d->fade = 0;
 
         if (d->length <= 0 || d->thresh <= 0)
-            throw std::string{ "TMaskCleaner: length and thresh must be greater than zero." };
+            throw std::string("TMaskCleaner: length and thresh must be greater than zero.");
 
         if (d->fade < 0)
-            throw std::string{ "TMaskCleaner: fade cannot be negative." };
+            throw std::string("TMaskCleaner: fade cannot be negative.");
     }
     catch (const std::string & error) {
-        vsapi->setError(out, ("TMaskCleaner: " + error).c_str());
+        vsapi->mapSetError(out, ("TMaskCleaner: " + error).c_str());
         vsapi->freeNode(d->node);
         return;
     }
-    vsapi->createFilter(in, out, "TMaskCleaner", TMСInit, TMСGetFrame, TMСFree, fmParallel, 0, d.release(), core);
+
+    VSFilterDependency deps[] = {{d->node, rpGeneral}};
+    vsapi->createVideoFilter(out, "TMaskCleaner", d->vi, TMCGetFrame, TMCFree, fmParallel, deps, 1, d.get(), core);
+	d.release();
 }
 
-VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin) {
-    configFunc("com.djatom.tmc", "tmc", "A really simple mask cleaning plugin for VapourSynth based on mt_hysteresis.", VAPOURSYNTH_API_VERSION, 1, plugin);
+VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
+    vspapi->configPlugin("com.djatom.tmc", "tmc", "A really simple mask cleaning plugin for VapourSynth based on mt_hysteresis.", VS_MAKE_VERSION(1, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
 
-    registerFunc("TMaskCleaner",
-        "clip:clip;"
+    vspapi->registerFunction("TMaskCleaner",
+        "clip:vnode;"
         "length:int:opt;"
         "thresh:int:opt;"
         "fade:int:opt;",
+        "clip:vnode;",
         TMCCreate, nullptr, plugin);
 }
