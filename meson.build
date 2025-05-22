@@ -1,6 +1,6 @@
 project('TMaskCleaner', 'cpp',
     version : '1',
-    default_options : ['buildtype=release', 'b_ndebug=if-release', 'cpp_std=c++11'],
+    default_options : ['buildtype=release', 'b_ndebug=if-release', 'cpp_std=c++17'],
 )
 
 # Sources
