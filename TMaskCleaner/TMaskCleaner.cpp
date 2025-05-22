@@ -14,6 +14,7 @@ struct TMCData {
     unsigned int length;
     unsigned int thresh;
     unsigned int fade;
+    unsigned int mode;
 };
 
 template<typename pixel_t>
@@ -37,7 +38,7 @@ void visit(int x, int y, int width, pixel_t *lookup, int bits) {
     lookup[byte_pos] |= (1 << (normal_pos - byte_pos * bits));
 }
 
-template<typename pixel_t>
+template<bool keep_small, typename pixel_t>
 void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
     pixel_t *VS_RESTRICT dstptr = reinterpret_cast<pixel_t *>(vsapi->getWritePtr(dst, 0));
@@ -84,15 +85,31 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
                 }
             }
             size_t pixels_count = white_pixels.size();
-            if (pixels_count >= d->length) {
-                if ((pixels_count - d->length > d->fade) || (d->fade == 0)) {
-                    for (auto &pixel : white_pixels) {
-                        dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
+            if constexpr (!keep_small) {
+                if (pixels_count >= d->length) {
+                    if ((pixels_count - d->length > d->fade) || (d->fade == 0)) {
+                        for (auto& pixel : white_pixels) {
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
+                        }
+                    }
+                    else {
+                        for (auto& pixel : white_pixels) {
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (pixels_count - d->length) / d->fade;
+                        }
                     }
                 }
-                else {
-                    for (auto &pixel : white_pixels) {
-                        dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (pixels_count - d->length) / d->fade;
+            }
+            else {
+                if (pixels_count <= d->length) {
+                    if ((d->length - pixels_count > d->fade) || (d->fade == 0)) {
+                        for (auto& pixel : white_pixels) {
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
+                        }
+                    }
+                    else {
+                        for (auto& pixel : white_pixels) {
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (d->length - pixels_count) / d->fade;
+                        }
                     }
                 }
             }
@@ -119,9 +136,16 @@ static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *insta
         int bits = d->vi->format.bitsPerSample;
 
         if (d->vi->format.bytesPerSample == 1) {
-            process_c<uint8_t>(src, dst, bits, d, vsapi);
-        } else if (d->vi->format.bytesPerSample == 2) {
-            process_c<uint16_t>(src, dst, bits, d, vsapi);
+            if (d->mode)
+                process_c<true, uint8_t>(src, dst, bits, d, vsapi);
+            else
+                process_c<false, uint8_t>(src, dst, bits, d, vsapi);
+        }
+        else if (d->vi->format.bytesPerSample == 2) {
+            if (d->mode)
+                process_c<true, uint16_t>(src, dst, bits, d, vsapi);
+            else
+                process_c<false, uint16_t>(src, dst, bits, d, vsapi);
         }
         vsapi->freeFrame(src);
         return dst;
@@ -158,11 +182,18 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         if (err)
             d->fade = 0;
 
+        d->mode = static_cast<float>(vsapi->mapGetInt(in, "mode", 0, &err));
+        if (err)
+            d->mode = 0;
+
         if (d->length <= 0 || d->thresh <= 0)
             throw std::string("TMaskCleaner: length and thresh must be greater than zero.");
 
         if (d->fade < 0)
             throw std::string("TMaskCleaner: fade cannot be negative.");
+
+        if (d->mode < 0 || d->mode > 1)
+            throw std::string("TMaskCleaner: mode must be in the range [0, 1].");
     }
     catch (const std::string & error) {
         vsapi->mapSetError(out, ("TMaskCleaner: " + error).c_str());
@@ -172,7 +203,7 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
 
     VSFilterDependency deps[] = {{d->node, rpGeneral}};
     vsapi->createVideoFilter(out, "TMaskCleaner", d->vi, TMCGetFrame, TMCFree, fmParallel, deps, 1, d.get(), core);
-	d.release();
+    d.release();
 }
 
 VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
@@ -182,7 +213,8 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI
         "clip:vnode;"
         "length:int:opt;"
         "thresh:int:opt;"
-        "fade:int:opt;",
+        "fade:int:opt;"
+        "mode:int:opt;",
         "clip:vnode;",
         TMCCreate, nullptr, plugin);
 }
