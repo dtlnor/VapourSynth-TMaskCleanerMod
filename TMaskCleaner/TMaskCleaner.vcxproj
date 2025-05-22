@@ -71,10 +71,11 @@
       <Optimization>MaxSpeedHighLevel</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <Parallelization>true</Parallelization>
       <OptimizeForWindowsApplication>true</OptimizeForWindowsApplication>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <GenerateAlternateCodePaths>AVX2</GenerateAlternateCodePaths>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
