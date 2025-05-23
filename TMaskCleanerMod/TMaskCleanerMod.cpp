@@ -40,6 +40,12 @@ void visit(int x, int y, int width, pixel_t *lookup, int bits) {
     lookup[byte_pos] |= (1 << (normal_pos - byte_pos * bits));
 }
 
+constexpr std::pair<int, int> directions4[4] = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} };
+constexpr std::pair<int, int> directions8[8] = {
+    {0, -1}, {-1, 0}, {1, 0}, {0, 1},
+    {-1, -1}, {1, -1}, {-1, 1}, {1, 1}
+};
+
 template<bool use4Way, bool keep_small, typename pixel_t>
 void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
@@ -54,6 +60,9 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
 
     std::deque<Coordinates> coordinates;
     std::vector<Coordinates> white_pixels;
+
+    const auto& directions = use4Way ? directions4 : directions8;
+    const int dir_count = use4Way ? 4 : 8;
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -70,32 +79,15 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
                 Coordinates current = coordinates.front();
                 coordinates.pop_front();
 
-                /* check surrounding positions */
-                int x_min = current.first == 0 ? 0 : current.first - 1;
-                int x_max = current.first == width - 1 ? width : current.first + 2;
-                int y_min = current.second == 0 ? 0 : current.second - 1;
-                int y_max = current.second == height - 1 ? height : current.second + 2;
-
-                for (int j = y_min; j < y_max; ++j) {
-                    for (int i = x_min; i < x_max; ++i) {
-                        if constexpr (use4Way) {
-                            // Skip diagonal pixels when using 4-way connectivity
-                            if ((i == current.first || j == current.second) &&
-                                !visited<pixel_t>(i, j, width, lookup, bits) &&
-                                is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
-                                coordinates.emplace_back(i, j);
-                                white_pixels.emplace_back(i, j);
-                                visit<pixel_t>(i, j, width, lookup, bits);
-                            }
-                        }
-                        else {
-                            if (!visited<pixel_t>(i, j, width, lookup, bits) &&
-                                is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
-                                coordinates.emplace_back(i, j);
-                                white_pixels.emplace_back(i, j);
-                                visit<pixel_t>(i, j, width, lookup, bits);
-                            }
-						}
+                for (int dir = 0; dir < dir_count; dir++) {
+                    int i = current.first + directions[dir].first;
+                    int j = current.second + directions[dir].second;
+                    if (i >= 0 && i < width && j >= 0 && j < height &&
+                        !visited<pixel_t>(i, j, width, lookup, bits) &&
+                        is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+                        coordinates.emplace_back(i, j);
+                        white_pixels.emplace_back(i, j);
+                        visit<pixel_t>(i, j, width, lookup, bits);
                     }
                 }
             }
