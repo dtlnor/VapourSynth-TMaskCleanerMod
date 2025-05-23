@@ -15,6 +15,7 @@ struct TMCData {
     unsigned int thresh;
     unsigned int fade;
     unsigned int mode;
+    unsigned int connectivity;
 };
 
 template<typename pixel_t>
@@ -38,7 +39,7 @@ void visit(int x, int y, int width, pixel_t *lookup, int bits) {
     lookup[byte_pos] |= (1 << (normal_pos - byte_pos * bits));
 }
 
-template<bool keep_small, typename pixel_t>
+template<bool use4Way, bool keep_small, typename pixel_t>
 void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
     pixel_t *VS_RESTRICT dstptr = reinterpret_cast<pixel_t *>(vsapi->getWritePtr(dst, 0));
@@ -76,11 +77,24 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
 
                 for (int j = y_min; j < y_max; ++j) {
                     for (int i = x_min; i < x_max; ++i) {
-                        if (!visited<pixel_t>(i, j, width, lookup, bits) && is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
-                            coordinates.emplace_back(i, j);
-                            white_pixels.emplace_back(i, j);
-                            visit<pixel_t>(i, j, width, lookup, bits);
+                        if constexpr (use4Way) {
+                            // Skip diagonal pixels when using 4-way connectivity
+                            if ((i == current.first || j == current.second) &&
+                                !visited<pixel_t>(i, j, width, lookup, bits) &&
+                                is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+                                coordinates.emplace_back(i, j);
+                                white_pixels.emplace_back(i, j);
+                                visit<pixel_t>(i, j, width, lookup, bits);
+                            }
                         }
+                        else {
+                            if (!visited<pixel_t>(i, j, width, lookup, bits) &&
+                                is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+                                coordinates.emplace_back(i, j);
+                                white_pixels.emplace_back(i, j);
+                                visit<pixel_t>(i, j, width, lookup, bits);
+                            }
+						}
                     }
                 }
             }
@@ -136,16 +150,30 @@ static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *insta
         int bits = d->vi->format.bitsPerSample;
 
         if (d->vi->format.bytesPerSample == 1) {
-            if (d->mode)
-                process_c<true, uint8_t>(src, dst, bits, d, vsapi);
-            else
-                process_c<false, uint8_t>(src, dst, bits, d, vsapi);
+            if (d->mode == 1) {
+                if (d->connectivity == 4)
+                    process_c<true, true, uint8_t>(src, dst, bits, d, vsapi);
+                else
+                    process_c<false, true, uint8_t>(src, dst, bits, d, vsapi);
+            } else {
+                if (d->connectivity == 4)
+                    process_c<true, false, uint8_t>(src, dst, bits, d, vsapi);
+                else
+                    process_c<false, false, uint8_t>(src, dst, bits, d, vsapi);
+            }
         }
         else if (d->vi->format.bytesPerSample == 2) {
-            if (d->mode)
-                process_c<true, uint16_t>(src, dst, bits, d, vsapi);
-            else
-                process_c<false, uint16_t>(src, dst, bits, d, vsapi);
+            if (d->mode == 1) {
+                if (d->connectivity == 4)
+                    process_c<true, true, uint16_t>(src, dst, bits, d, vsapi);
+                else
+                    process_c<false, true, uint16_t>(src, dst, bits, d, vsapi);
+            } else {
+                if (d->connectivity == 4)
+                    process_c<true, false, uint16_t>(src, dst, bits, d, vsapi);
+                else
+                    process_c<false, false, uint16_t>(src, dst, bits, d, vsapi);
+            }
         }
         vsapi->freeFrame(src);
         return dst;
@@ -182,6 +210,10 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         if (err)
             d->fade = 0;
 
+        d->connectivity = static_cast<unsigned int>(vsapi->mapGetInt(in, "connectivity", 0, &err));
+        if (err)
+            d->connectivity = 8;
+
         d->mode = static_cast<float>(vsapi->mapGetInt(in, "mode", 0, &err));
         if (err)
             d->mode = 0;
@@ -191,6 +223,9 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
 
         if (d->fade < 0)
             throw std::string("TMaskCleaner: fade cannot be negative.");
+
+        if (d->connectivity != 4 && d->connectivity != 8)
+            throw std::string("TMaskCleaner: connectivity must be either 4 or 8.");
 
         if (d->mode < 0 || d->mode > 1)
             throw std::string("TMaskCleaner: mode must be in the range [0, 1].");
@@ -214,6 +249,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI
         "length:int:opt;"
         "thresh:int:opt;"
         "fade:int:opt;"
+        "connectivity:int:opt;"
         "mode:int:opt;",
         "clip:vnode;",
         TMCCreate, nullptr, plugin);
