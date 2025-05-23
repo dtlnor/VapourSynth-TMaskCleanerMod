@@ -101,7 +101,7 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             size_t pixels_count = white_pixels.size();
             if constexpr (!keep_small) {
                 if (pixels_count >= d->length) {
-                    if ((pixels_count - d->length > d->fade) || (d->fade == 0)) {
+                    if ((d->fade == 0) || (pixels_count - d->length > d->fade)) {
                         for (auto& pixel : white_pixels) {
                             dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
                         }
@@ -115,7 +115,7 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             }
             else {
                 if (pixels_count <= d->length) {
-                    if ((d->length - pixels_count > d->fade) || (d->fade == 0)) {
+                    if ((d->fade == 0) || (d->length - pixels_count > d->fade)) {
                         for (auto& pixel : white_pixels) {
                             dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
                         }
