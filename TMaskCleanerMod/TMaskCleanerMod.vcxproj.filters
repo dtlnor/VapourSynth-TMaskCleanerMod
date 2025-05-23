@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="TMaskCleaner.cpp">
+    <ClCompile Include="TMaskCleanerMod.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -196,7 +196,7 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
 
     try {
         if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
-            throw std::string("TMaskCleaner: only constant format 8-16 bits integer input supported.");
+            throw std::string("only constant format 8-16 bits integer input supported.");
 
         d->length = static_cast<float>(vsapi->mapGetInt(in, "length", 0, &err));
         if (err)
@@ -219,32 +219,32 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
             d->mode = 0;
 
         if (d->length <= 0 || d->thresh <= 0)
-            throw std::string("TMaskCleaner: length and thresh must be greater than zero.");
+            throw std::string("length and thresh must be greater than zero.");
 
         if (d->fade < 0)
-            throw std::string("TMaskCleaner: fade cannot be negative.");
+            throw std::string("fade cannot be negative.");
 
         if (d->connectivity != 4 && d->connectivity != 8)
-            throw std::string("TMaskCleaner: connectivity must be either 4 or 8.");
+            throw std::string("connectivity must be either 4 or 8.");
 
         if (d->mode < 0 || d->mode > 1)
-            throw std::string("TMaskCleaner: mode must be in the range [0, 1].");
+            throw std::string("mode must be in the range [0, 1].");
     }
     catch (const std::string & error) {
-        vsapi->mapSetError(out, ("TMaskCleaner: " + error).c_str());
+        vsapi->mapSetError(out, ("TMaskCleanerMod: " + error).c_str());
         vsapi->freeNode(d->node);
         return;
     }
 
     VSFilterDependency deps[] = {{d->node, rpGeneral}};
-    vsapi->createVideoFilter(out, "TMaskCleaner", d->vi, TMCGetFrame, TMCFree, fmParallel, deps, 1, d.get(), core);
+    vsapi->createVideoFilter(out, "TMaskCleanerMod", d->vi, TMCGetFrame, TMCFree, fmParallel, deps, 1, d.get(), core);
     d.release();
 }
 
 VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI *vspapi) {
-    vspapi->configPlugin("com.djatom.tmc", "tmc", "A really simple mask cleaning plugin for VapourSynth based on mt_hysteresis.", VS_MAKE_VERSION(1, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
+    vspapi->configPlugin("com.dtlnor.tmcm", "tmcm", "A really simple mask cleaning plugin for VapourSynth based on mt_hysteresis.", VS_MAKE_VERSION(1, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
 
-    vspapi->registerFunction("TMaskCleaner",
+    vspapi->registerFunction("TMaskCleanerMod",
         "clip:vnode;"
         "length:int:opt;"
         "thresh:int:opt;"
