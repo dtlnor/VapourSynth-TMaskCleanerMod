@@ -5,6 +5,7 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 #include <string>
+#include <deque>
 
 typedef std::pair<int, int> Coordinates;
 
@@ -51,7 +52,7 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
     pixel_t *lookup = new pixel_t[height * width / bits];
     memset(lookup, 0, height * (width * sizeof(pixel_t)) / bits);
 
-    std::vector<Coordinates> coordinates;
+    std::deque<Coordinates> coordinates;
     std::vector<Coordinates> white_pixels;
 
     for (int y = 0; y < height; ++y) {
@@ -65,9 +66,9 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             coordinates.emplace_back(x, y);
 
             while (!coordinates.empty()) {
-                /* pop last coordinates */
-                Coordinates current = coordinates.back();
-                coordinates.pop_back();
+                /* pop first coordinates (BFS) */
+                Coordinates current = coordinates.front();
+                coordinates.pop_front();
 
                 /* check surrounding positions */
                 int x_min = current.first == 0 ? 0 : current.first - 1;
