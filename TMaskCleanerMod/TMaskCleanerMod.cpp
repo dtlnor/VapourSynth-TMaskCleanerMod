@@ -139,7 +139,9 @@ static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *insta
         const VSVideoFormat* fi = vsapi->getVideoFrameFormat(src);
         int height = vsapi->getFrameHeight(src, 0);
         int width = vsapi->getFrameWidth(src, 0);
-        VSFrame* dst = vsapi->newVideoFrame(fi, width, height, src, core);
+        const VSFrame* fr[] = { nullptr, src, src };
+        const int pl[] = { 0, 1, 2 };
+        VSFrame* dst = vsapi->newVideoFrame2(fi, width, height, fr, pl, src, core);
         int bits = d->vi->format.bitsPerSample;
 
         if (d->vi->format.bytesPerSample == 1) {
