@@ -7,7 +7,10 @@
 #include <string>
 #include <deque>
 
+struct TMCData;
+
 typedef std::pair<int, int> Coordinates;
+typedef void (*Process_c_Ptr)(const VSFrame*, VSFrame*, int, const TMCData*, const VSAPI*);
 
 struct TMCData {
     VSNode * node;
@@ -17,6 +20,9 @@ struct TMCData {
     unsigned int fade;
     unsigned int mode;
     unsigned int connectivity;
+    Process_c_Ptr process_c_func;
+    const Coordinates* directions;
+    int dir_count;
 };
 
 template<typename pixel_t>
@@ -40,13 +46,13 @@ void visit(int x, int y, int width, pixel_t *lookup, int bits) {
     lookup[byte_pos] |= (1 << (normal_pos - byte_pos * bits));
 }
 
-constexpr std::pair<int, int> directions4[4] = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} };
-constexpr std::pair<int, int> directions8[8] = {
+constexpr Coordinates directions4[4] = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} };
+constexpr Coordinates directions8[8] = {
     {0, -1}, {-1, 0}, {1, 0}, {0, 1},
     {-1, -1}, {1, -1}, {-1, 1}, {1, 1}
 };
 
-template<bool use4Way, bool keep_small, typename pixel_t>
+template<bool keep_small, typename pixel_t>
 void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
     pixel_t *VS_RESTRICT dstptr = reinterpret_cast<pixel_t *>(vsapi->getWritePtr(dst, 0));
@@ -61,8 +67,8 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
     std::deque<Coordinates> coordinates;
     std::vector<Coordinates> white_pixels;
 
-    const auto& directions = use4Way ? directions4 : directions8;
-    const int dir_count = use4Way ? 4 : 8;
+    const auto& directions = d->directions;
+    const int dir_count = d->dir_count;
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -144,32 +150,8 @@ static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *insta
         VSFrame* dst = vsapi->newVideoFrame2(fi, width, height, fr, pl, src, core);
         int bits = d->vi->format.bitsPerSample;
 
-        if (d->vi->format.bytesPerSample == 1) {
-            if (d->mode == 1) {
-                if (d->connectivity == 4)
-                    process_c<true, true, uint8_t>(src, dst, bits, d, vsapi);
-                else
-                    process_c<false, true, uint8_t>(src, dst, bits, d, vsapi);
-            } else {
-                if (d->connectivity == 4)
-                    process_c<true, false, uint8_t>(src, dst, bits, d, vsapi);
-                else
-                    process_c<false, false, uint8_t>(src, dst, bits, d, vsapi);
-            }
-        }
-        else if (d->vi->format.bytesPerSample == 2) {
-            if (d->mode == 1) {
-                if (d->connectivity == 4)
-                    process_c<true, true, uint16_t>(src, dst, bits, d, vsapi);
-                else
-                    process_c<false, true, uint16_t>(src, dst, bits, d, vsapi);
-            } else {
-                if (d->connectivity == 4)
-                    process_c<true, false, uint16_t>(src, dst, bits, d, vsapi);
-                else
-                    process_c<false, false, uint16_t>(src, dst, bits, d, vsapi);
-            }
-        }
+        d->process_c_func(src, dst, bits, d, vsapi);
+
         vsapi->freeFrame(src);
         return dst;
     }
@@ -224,6 +206,32 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
 
         if (d->mode < 0 || d->mode > 1)
             throw std::string("mode must be in the range [0, 1].");
+
+        if (d->connectivity == 4) {
+            d->directions = directions4;
+            d->dir_count = 4;
+        }
+        else {
+            d->directions = directions8;
+            d->dir_count = 8;
+        }
+
+        if (d->vi->format.bytesPerSample == 1) {
+            if (d->mode == 1) {
+                 d->process_c_func = &process_c<true, uint8_t>;
+            }
+            else {
+                 d->process_c_func = &process_c<false, uint8_t>;
+            }
+        }
+        else if (d->vi->format.bytesPerSample == 2) {
+            if (d->mode == 1) {
+                d->process_c_func = &process_c<true, uint16_t>;
+            }
+            else {
+                d->process_c_func = &process_c<false, uint16_t>;
+            }
+        }
     }
     catch (const std::string & error) {
         vsapi->mapSetError(out, ("TMaskCleanerMod: " + error).c_str());
