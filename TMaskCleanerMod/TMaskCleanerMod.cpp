@@ -6,6 +6,7 @@
 #include "VSHelper4.h"
 #include <string>
 #include <deque>
+#include <numeric>
 
 struct TMCData;
 
@@ -18,8 +19,6 @@ struct TMCData {
     unsigned int length;
     unsigned int thresh;
     unsigned int fade;
-    unsigned int mode;
-    unsigned int connectivity;
     Process_c_Ptr process_c_func;
     const Coordinates* directions;
     int dir_count;
@@ -52,7 +51,23 @@ constexpr Coordinates directions8[8] = {
     {-1, -1}, {1, -1}, {-1, 1}, {1, 1}
 };
 
-template<bool keep_small, typename pixel_t>
+template<bool keep_less, typename pixel_t>
+void setProcessFunction(TMCData* d, int mode) {
+    switch (mode) {
+    case 0: d->process_c_func = &process_c<0, keep_less, pixel_t>; break;
+    case 1: d->process_c_func = &process_c<1, keep_less, pixel_t>; break;
+    case 2: d->process_c_func = &process_c<2, keep_less, pixel_t>; break;
+    case 3: d->process_c_func = &process_c<3, keep_less, pixel_t>; break;
+    case 4: d->process_c_func = &process_c<4, keep_less, pixel_t>; break;
+    case 5: d->process_c_func = &process_c<5, keep_less, pixel_t>; break;
+    case 6: d->process_c_func = &process_c<6, keep_less, pixel_t>; break;
+    case 7: d->process_c_func = &process_c<7, keep_less, pixel_t>; break;
+    case 8: d->process_c_func = &process_c<8, keep_less, pixel_t>; break;
+    default: throw std::string("mode must be in the range [0, 8].");
+    }
+}
+
+template<int filter_mode, bool keep_less, typename pixel_t>
 void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, const VSAPI * vsapi) {
     const pixel_t *srcptr = reinterpret_cast<const pixel_t *>(vsapi->getReadPtr(src, 0));
     pixel_t *VS_RESTRICT dstptr = reinterpret_cast<pixel_t *>(vsapi->getWritePtr(dst, 0));
@@ -69,6 +84,7 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
 
     const auto& directions = d->directions;
     const int dir_count = d->dir_count;
+    const double fade_inv = d->fade > 0 ? 1.0f / d->fade : 0.0f;
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -97,31 +113,81 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
                     }
                 }
             }
-            size_t pixels_count = white_pixels.size();
-            if constexpr (!keep_small) {
-                if (pixels_count >= d->length) {
-                    if ((d->fade == 0) || (pixels_count - d->length > d->fade)) {
+
+            size_t component_value;
+            if constexpr (filter_mode == 0) {
+                // pixel count
+                component_value = white_pixels.size();
+            } else if constexpr (filter_mode == 1) {
+                // centriod_x
+                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0, 
+                                [](double sum, const Coordinates& p) { return sum + p.first; }) / white_pixels.size());
+            } else if constexpr (filter_mode == 2) {
+                // centriod_y
+                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0, 
+                                [](double sum, const Coordinates& p) { return sum + p.second; }) / white_pixels.size());
+            } else if constexpr (filter_mode == 3) {
+                // min_x
+                auto min_x = std::min_element(white_pixels.begin(), white_pixels.end(),
+                    [](const Coordinates& a, const Coordinates& b) { return a.first < b.first; });
+                component_value = min_x->first;
+            } else if constexpr (filter_mode == 4) {
+                // min_y
+                auto min_y = std::min_element(white_pixels.begin(), white_pixels.end(),
+                    [](const Coordinates& a, const Coordinates& b) { return a.second < b.second; });
+                component_value = min_y->second;
+            } else if constexpr (filter_mode == 5) {
+                // max_x
+                auto max_x = std::max_element(white_pixels.begin(), white_pixels.end(),
+                    [](const Coordinates& a, const Coordinates& b) { return a.first < b.first; });
+                component_value = max_x->first;
+            } else if constexpr (filter_mode == 6) {
+                // max_y
+                auto max_y = std::max_element(white_pixels.begin(), white_pixels.end(),
+                    [](const Coordinates& a, const Coordinates& b) { return a.second < b.second; });
+                component_value = max_y->second;
+            } else if constexpr (filter_mode == 7) {
+                // width
+                int min_x = width, max_x = -1;
+                for (const auto& pixel : white_pixels) {
+                    min_x = std::min(min_x, pixel.first);
+                    max_x = std::max(max_x, pixel.first);
+                }
+                component_value = max_x - min_x + 1;
+            } else if constexpr (filter_mode == 8) {
+                // height
+                int min_y = height, max_y = -1;
+                for (const auto& pixel : white_pixels) {
+                    min_y = std::min(min_y, pixel.second);
+                    max_y = std::max(max_y, pixel.second);
+                }
+                component_value = max_y - min_y + 1;
+            }
+
+            if constexpr (!keep_less) {
+                if (component_value >= d->length) {
+                    if ((d->fade == 0) || (component_value - d->length > d->fade)) {
                         for (auto& pixel : white_pixels) {
                             dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
                         }
                     }
                     else {
                         for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (pixels_count - d->length) / d->fade;
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (component_value - d->length) * fade_inv;
                         }
                     }
                 }
             }
             else {
-                if (pixels_count <= d->length) {
-                    if ((d->fade == 0) || (d->length - pixels_count > d->fade)) {
+                if (component_value <= d->length) {
+                    if ((d->fade == 0) || (d->length - component_value > d->fade)) {
                         for (auto& pixel : white_pixels) {
                             dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
                         }
                     }
                     else {
                         for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (d->length - pixels_count) / d->fade;
+                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (d->length - component_value) * fade_inv;
                         }
                     }
                 }
@@ -150,7 +216,11 @@ static const VSFrame *VS_CC TMCGetFrame(int n, int activationReason, void *insta
         VSFrame* dst = vsapi->newVideoFrame2(fi, width, height, fr, pl, src, core);
         int bits = d->vi->format.bitsPerSample;
 
-        d->process_c_func(src, dst, bits, d, vsapi);
+        try {
+            d->process_c_func(src, dst, bits, d, vsapi);
+        } catch (const std::exception &e) {
+            vsapi->setFilterError((std::string("TMaskCleanerMod error: ") + e.what()).c_str(), frameCtx);
+        }
 
         vsapi->freeFrame(src);
         return dst;
@@ -187,13 +257,17 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         if (err)
             d->fade = 0;
 
-        d->connectivity = static_cast<unsigned int>(vsapi->mapGetInt(in, "connectivity", 0, &err));
+        auto connectivity = static_cast<unsigned int>(vsapi->mapGetInt(in, "connectivity", 0, &err));
         if (err)
-            d->connectivity = 8;
+            connectivity = 8;
 
-        d->mode = static_cast<float>(vsapi->mapGetInt(in, "mode", 0, &err));
+        auto keep_less = static_cast<unsigned int>(vsapi->mapGetInt(in, "keepless", 0, &err));
         if (err)
-            d->mode = 0;
+            keep_less = 0;
+
+        auto mode = static_cast<int>(vsapi->mapGetInt(in, "mode", 0, &err));
+        if (err)
+            mode = 0;
 
         if (d->length <= 0 || d->thresh <= 0)
             throw std::string("length and thresh must be greater than zero.");
@@ -201,13 +275,16 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         if (d->fade < 0)
             throw std::string("fade cannot be negative.");
 
-        if (d->connectivity != 4 && d->connectivity != 8)
+        if (connectivity != 4 && connectivity != 8)
             throw std::string("connectivity must be either 4 or 8.");
 
-        if (d->mode < 0 || d->mode > 1)
-            throw std::string("mode must be in the range [0, 1].");
+        if (keep_less != 0 && keep_less != 1)
+            throw std::string("keepless must be either 0 or 1.");
 
-        if (d->connectivity == 4) {
+        if (mode < 0 || mode > 8)
+            throw std::string("mode must be in the range [0, 8].");
+        
+        if (connectivity == 4) {
             d->directions = directions4;
             d->dir_count = 4;
         }
@@ -217,19 +294,17 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         }
 
         if (d->vi->format.bytesPerSample == 1) {
-            if (d->mode == 1) {
-                 d->process_c_func = &process_c<true, uint8_t>;
+            if (keep_less) {
+                setProcessFunction<true, uint8_t>(d.get(), mode);
+            } else {
+                setProcessFunction<false, uint8_t>(d.get(), mode);
+            }
+        } else if (d->vi->format.bytesPerSample == 2) {
+            if (keep_less) {
+                setProcessFunction<true, uint16_t>(d.get(), mode);
             }
             else {
-                 d->process_c_func = &process_c<false, uint8_t>;
-            }
-        }
-        else if (d->vi->format.bytesPerSample == 2) {
-            if (d->mode == 1) {
-                d->process_c_func = &process_c<true, uint16_t>;
-            }
-            else {
-                d->process_c_func = &process_c<false, uint16_t>;
+                setProcessFunction<false, uint16_t>(d.get(), mode);
             }
         }
     }
@@ -253,6 +328,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin *plugin, const VSPLUGINAPI
         "thresh:int:opt;"
         "fade:int:opt;"
         "connectivity:int:opt;"
+        "keepless:int:opt;"
         "mode:int:opt;",
         "clip:vnode;",
         TMCCreate, nullptr, plugin);
