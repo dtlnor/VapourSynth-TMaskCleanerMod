@@ -25,12 +25,12 @@ struct TMCData {
 };
 
 template<typename pixel_t>
-bool is_white(pixel_t value, unsigned int thresh) {
+inline bool is_white(pixel_t value, unsigned int thresh) {
     return value >= thresh;
 }
 
 template<typename pixel_t>
-bool visited(int x, int y, int width, pixel_t *lookup, int bits) {
+inline bool visited(int x, int y, int width, pixel_t *lookup, int bits) {
     unsigned int normal_pos = y * width + x;
     unsigned int byte_pos = normal_pos / bits;
 
@@ -38,7 +38,7 @@ bool visited(int x, int y, int width, pixel_t *lookup, int bits) {
 }
 
 template<typename pixel_t>
-void visit(int x, int y, int width, pixel_t *lookup, int bits) {
+inline void visit(int x, int y, int width, pixel_t *lookup, int bits) {
     unsigned int normal_pos = y * width + x;
     unsigned int byte_pos = normal_pos / bits;
 
@@ -167,13 +167,17 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             if constexpr (!keep_less) {
                 if (component_value >= d->length) {
                     if ((d->fade == 0) || (component_value - d->length > d->fade)) {
-                        for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
+                        for (const auto& pixel : white_pixels) {
+							const auto dst_pos = dstStride * pixel.second + pixel.first;
+							const auto src_pos = srcStride * pixel.second + pixel.first;
+                            dstptr[dst_pos] = srcptr[src_pos];
                         }
                     }
                     else {
-                        for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (component_value - d->length) * fade_inv;
+                        for (const auto& pixel : white_pixels) {
+                            const auto dst_pos = dstStride * pixel.second + pixel.first;
+                            const auto src_pos = srcStride * pixel.second + pixel.first;
+                            dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
                         }
                     }
                 }
@@ -181,13 +185,17 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             else {
                 if (component_value <= d->length) {
                     if ((d->fade == 0) || (d->length - component_value > d->fade)) {
-                        for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first];
+                        for (const auto& pixel : white_pixels) {
+                            const auto dst_pos = dstStride * pixel.second + pixel.first;
+                            const auto src_pos = srcStride * pixel.second + pixel.first;
+                            dstptr[dst_pos] = srcptr[src_pos];
                         }
                     }
                     else {
-                        for (auto& pixel : white_pixels) {
-                            dstptr[dstStride * pixel.second + pixel.first] = srcptr[srcStride * pixel.second + pixel.first] * (d->length - component_value) * fade_inv;
+                        for (const auto& pixel : white_pixels) {
+                            const auto dst_pos = dstStride * pixel.second + pixel.first;
+                            const auto src_pos = srcStride * pixel.second + pixel.first;
+                            dstptr[dst_pos] = srcptr[src_pos] * (d->length - component_value) * fade_inv;
                         }
                     }
                 }
