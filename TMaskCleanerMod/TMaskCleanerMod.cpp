@@ -95,6 +95,8 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
             white_pixels.clear();
 
             coordinates.emplace_back(x, y);
+            white_pixels.emplace_back(x, y);
+            visit<pixel_t>(x, y, width, lookup, bits);
 
             while (!coordinates.empty()) {
                 /* pop first coordinates (BFS) */
