@@ -18,5 +18,16 @@
     <ClCompile Include="TMaskCleanerMod.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GetCCLStats.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="shared.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="shared.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
