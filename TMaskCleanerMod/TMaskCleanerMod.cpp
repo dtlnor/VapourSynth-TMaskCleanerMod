@@ -122,12 +122,12 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
                 component_value = white_pixels.size();
             } else if constexpr (filter_mode == 1) {
                 // centriod_x
-                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0, 
-                                [](double sum, const Coordinates& p) { return sum + p.first; }) / white_pixels.size());
+                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0,
+                    [](double sum, const Coordinates& p) { return sum + p.first; }) / white_pixels.size());
             } else if constexpr (filter_mode == 2) {
                 // centriod_y
-                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0, 
-                                [](double sum, const Coordinates& p) { return sum + p.second; }) / white_pixels.size());
+                component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0,
+                    [](double sum, const Coordinates& p) { return sum + p.second; }) / white_pixels.size());
             } else if constexpr (filter_mode == 3) {
                 // min_x
                 auto min_x = std::min_element(white_pixels.begin(), white_pixels.end(),
@@ -170,8 +170,8 @@ void process_c(const VSFrame * src, VSFrame * dst, int bits, const TMCData * d, 
                 if (component_value >= d->length) {
                     if ((d->fade == 0) || (component_value - d->length > d->fade)) {
                         for (const auto& pixel : white_pixels) {
-							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							const auto src_pos = srcStride * pixel.second + pixel.first;
+                            const auto dst_pos = dstStride * pixel.second + pixel.first;
+                            const auto src_pos = srcStride * pixel.second + pixel.first;
                             dstptr[dst_pos] = srcptr[src_pos];
                         }
                     }
@@ -324,7 +324,7 @@ void VS_CC TMCCreate(const VSMap *in, VSMap *out, void *userData, VSCore *core, 
         return;
     }
 
-    VSFilterDependency deps[] = {{d->node, rpGeneral}};
+    VSFilterDependency deps[] = {{d->node, rpStrictSpatial}};
     vsapi->createVideoFilter(out, "TMaskCleanerMod", d->vi, TMCGetFrame, TMCFree, fmParallel, deps, 1, d.get(), core);
     d.release();
 }
