@@ -5,7 +5,10 @@ project('TMaskCleanerMod', 'cpp',
 
 # Sources
 sources = [
+    'TMaskCleanerMod/shared.cpp',
+    'TMaskCleanerMod/shared.h',
     'TMaskCleanerMod/TMaskCleanerMod.cpp',
+    'TMaskCleanerMod/GetCCLStats.cpp'
 ]
 
 # Dependencies
