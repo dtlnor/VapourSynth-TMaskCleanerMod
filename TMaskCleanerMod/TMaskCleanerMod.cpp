@@ -14,6 +14,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 
 	std::deque<Coordinates> coordinates;
 	std::vector<Coordinates> white_pixels;
+	white_pixels.reserve(4096);
 
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
