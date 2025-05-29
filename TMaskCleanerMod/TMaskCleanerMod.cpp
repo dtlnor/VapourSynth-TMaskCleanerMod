@@ -263,21 +263,21 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 			d->dir_count = 8;
 		}
 
-		// 8/16-bit, keep_less, binarize
-		int selector = (d->vi->format.bytesPerSample == 1 ? 0 : 4) |
+		// binarize, keep_less, 8/16-bit
+		int selector = (d->vi->format.bytesPerSample == 1 ? 0 : 1) |
 			(keep_less ? 2 : 0) |
-			(binarize ? 1 : 0);
+			(binarize ? 4 : 0);
 
-		//                           <binarize, keep_less, 8/16>
+		//                              <binarize, keep_less, 8/16>
 		switch (selector) {
-			case 0: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
-			case 1: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
-			case 2: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
-			case 3: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
-			case 4: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
-			case 5: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
-			case 6: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
-			case 7: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
+			case 0b000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
+			case 0b001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
+			case 0b010: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
+			case 0b011: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
+			case 0b100: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
+			case 0b101: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
+			case 0b110: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
+			case 0b111: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
 			default: throw std::string("Unsupported combination of parameters");
 		}
 	}
