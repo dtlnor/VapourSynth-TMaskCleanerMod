@@ -85,7 +85,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GetCCLStats.cpp" />
+    <ClCompile Include="shared.cpp" />
     <ClCompile Include="TMaskCleanerMod.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="shared.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

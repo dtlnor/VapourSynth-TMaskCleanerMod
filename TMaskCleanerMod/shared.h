@@ -65,3 +65,4 @@ void setProcessFunction(TMCData* d, int mode) {
 
 extern void VS_CC FilterFree(void* instanceData, VSCore* core, const VSAPI* vsapi);
 extern void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi);
+extern void VS_CC CCSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi);
