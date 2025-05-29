@@ -125,11 +125,11 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 					else {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							const auto src_pos = srcStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
 								dstptr[dst_pos] = peak * (component_value - d->length) * fade_inv;
 							}
 							else {
+								const auto src_pos = srcStride * pixel.second + pixel.first;
 								dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
 							}
 						}
@@ -154,11 +154,11 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
-								dstptr[dst_pos] = peak * (component_value - d->length) * fade_inv;
+								dstptr[dst_pos] = peak * (d->length - component_value) * fade_inv;
 							}
 							else {
 								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
+								dstptr[dst_pos] = srcptr[src_pos] * (d->length - component_value) * fade_inv;
 							}
 						}
 					}
