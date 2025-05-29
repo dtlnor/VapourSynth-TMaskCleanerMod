@@ -14,6 +14,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 		"length:int:opt;"
 		"thresh:int:opt;"
 		"fade:int:opt;"
+		"binarize:int:opt;"
 		"connectivity:int:opt;"
 		"keepless:int:opt;"
 		"mode:int:opt;",

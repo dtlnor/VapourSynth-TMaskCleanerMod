@@ -47,18 +47,18 @@ constexpr Coordinates directions8[8] = {
 	{-1, -1}, {1, -1}, {-1, 1}, {1, 1}
 };
 
-template<bool keep_less, typename pixel_t>
+template<bool binarize, bool keep_less, typename pixel_t>
 void setProcessFunction(TMCData* d, int mode) {
 	switch (mode) {
-	case 0: d->process_c_func = &process_c<0, keep_less, pixel_t>; break;
-	case 1: d->process_c_func = &process_c<1, keep_less, pixel_t>; break;
-	case 2: d->process_c_func = &process_c<2, keep_less, pixel_t>; break;
-	case 3: d->process_c_func = &process_c<3, keep_less, pixel_t>; break;
-	case 4: d->process_c_func = &process_c<4, keep_less, pixel_t>; break;
-	case 5: d->process_c_func = &process_c<5, keep_less, pixel_t>; break;
-	case 6: d->process_c_func = &process_c<6, keep_less, pixel_t>; break;
-	case 7: d->process_c_func = &process_c<7, keep_less, pixel_t>; break;
-	case 8: d->process_c_func = &process_c<8, keep_less, pixel_t>; break;
+	case 0: d->process_c_func = &process_c<0, binarize, keep_less, pixel_t>; break;
+	case 1: d->process_c_func = &process_c<1, binarize, keep_less, pixel_t>; break;
+	case 2: d->process_c_func = &process_c<2, binarize, keep_less, pixel_t>; break;
+	case 3: d->process_c_func = &process_c<3, binarize, keep_less, pixel_t>; break;
+	case 4: d->process_c_func = &process_c<4, binarize, keep_less, pixel_t>; break;
+	case 5: d->process_c_func = &process_c<5, binarize, keep_less, pixel_t>; break;
+	case 6: d->process_c_func = &process_c<6, binarize, keep_less, pixel_t>; break;
+	case 7: d->process_c_func = &process_c<7, binarize, keep_less, pixel_t>; break;
+	case 8: d->process_c_func = &process_c<8, binarize, keep_less, pixel_t>; break;
 	default: throw std::string("mode must be in the range [0, 8].");
 	}
 }

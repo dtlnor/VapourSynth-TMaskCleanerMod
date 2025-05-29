@@ -1,6 +1,6 @@
 #include "shared.h"
 
-template<int filter_mode, bool keep_less, typename pixel_t>
+template<int filter_mode, bool binarize, bool keep_less, typename pixel_t>
 void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, const VSAPI* vsapi) {
 	const pixel_t* srcptr = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, 0));
 	pixel_t* VS_RESTRICT dstptr = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, 0));
@@ -10,6 +10,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	int width = vsapi->getFrameWidth(src, 0);
 	memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * vsapi->getFrameHeight(dst, 0));
 	std::vector<uint8_t> lookup((height * width + 7) >> 3, 0);
+	const auto peak = (1 << bits) - 1;
 
 	std::deque<Coordinates> coordinates;
 	std::vector<Coordinates> white_pixels;
@@ -111,15 +112,25 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 					if ((d->fade == 0) || (component_value - d->length > d->fade)) {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							const auto src_pos = srcStride * pixel.second + pixel.first;
-							dstptr[dst_pos] = srcptr[src_pos];
+							if constexpr (binarize) {
+								dstptr[dst_pos] = peak;
+							}
+							else {
+								const auto src_pos = srcStride * pixel.second + pixel.first;
+								dstptr[dst_pos] = srcptr[src_pos];
+							}
 						}
 					}
 					else {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							const auto src_pos = srcStride * pixel.second + pixel.first;
-							dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
+							if constexpr (binarize) {
+								dstptr[dst_pos] = peak * (component_value - d->length) * fade_inv;
+							}
+							else {
+								dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
+							}
 						}
 					}
 				}
@@ -129,15 +140,25 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 					if ((d->fade == 0) || (d->length - component_value > d->fade)) {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							const auto src_pos = srcStride * pixel.second + pixel.first;
-							dstptr[dst_pos] = srcptr[src_pos];
+							if constexpr (binarize) {
+								dstptr[dst_pos] = peak;
+							}
+							else {
+								const auto src_pos = srcStride * pixel.second + pixel.first;
+								dstptr[dst_pos] = srcptr[src_pos];
+							}
 						}
 					}
 					else {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							const auto src_pos = srcStride * pixel.second + pixel.first;
-							dstptr[dst_pos] = srcptr[src_pos] * (d->length - component_value) * fade_inv;
+							if constexpr (binarize) {
+								dstptr[dst_pos] = peak * (component_value - d->length) * fade_inv;
+							}
+							else {
+								const auto src_pos = srcStride * pixel.second + pixel.first;
+								dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
+							}
 						}
 					}
 				}
@@ -201,6 +222,10 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (err)
 			d->fade = 0;
 
+		auto binarize = static_cast<bool>(vsapi->mapGetInt(in, "binarize", 0, &err));
+		if (err)
+			binarize = false;
+
 		auto connectivity = static_cast<unsigned int>(vsapi->mapGetInt(in, "connectivity", 0, &err));
 		if (err)
 			connectivity = 8;
@@ -237,21 +262,22 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 			d->dir_count = 8;
 		}
 
-		if (d->vi->format.bytesPerSample == 1) {
-			if (keep_less) {
-				setProcessFunction<true, uint8_t>(d.get(), mode);
-			}
-			else {
-				setProcessFunction<false, uint8_t>(d.get(), mode);
-			}
-		}
-		else if (d->vi->format.bytesPerSample == 2) {
-			if (keep_less) {
-				setProcessFunction<true, uint16_t>(d.get(), mode);
-			}
-			else {
-				setProcessFunction<false, uint16_t>(d.get(), mode);
-			}
+		// 8/16-bit, keep_less, binarize
+		int selector = (d->vi->format.bytesPerSample == 1 ? 0 : 4) |
+			(keep_less ? 2 : 0) |
+			(binarize ? 1 : 0);
+
+		//                           <binarize, keep_less, 8/16>
+		switch (selector) {
+			case 0: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
+			case 1: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
+			case 2: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
+			case 3: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
+			case 4: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
+			case 5: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
+			case 6: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
+			case 7: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
+			default: throw std::string("Unsupported combination of parameters");
 		}
 	}
 	catch (const std::string& error) {
