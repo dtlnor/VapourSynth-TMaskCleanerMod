@@ -31,20 +31,14 @@ inline bool is_white(pixel_t value, unsigned int thresh) {
 	return value >= thresh;
 }
 
-template<typename pixel_t>
-inline bool visited(int x, int y, int width, pixel_t* lookup, int bits) {
+inline bool visited(int x, int y, int width, const std::vector<uint8_t>& lookup) {
 	unsigned int normal_pos = y * width + x;
-	unsigned int byte_pos = normal_pos / bits;
-
-	return lookup[byte_pos] & (1 << (normal_pos - byte_pos * bits));
+	return lookup[normal_pos >> 3] & (1 << (normal_pos & 7));
 }
 
-template<typename pixel_t>
-inline void visit(int x, int y, int width, pixel_t* lookup, int bits) {
+inline void visit(int x, int y, int width, std::vector<uint8_t>& lookup) {
 	unsigned int normal_pos = y * width + x;
-	unsigned int byte_pos = normal_pos / bits;
-
-	lookup[byte_pos] |= (1 << (normal_pos - byte_pos * bits));
+	lookup[normal_pos >> 3] |= (1 << (normal_pos & 7));
 }
 
 constexpr Coordinates directions4[4] = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} };

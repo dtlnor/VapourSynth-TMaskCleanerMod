@@ -9,8 +9,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	int height = vsapi->getFrameHeight(src, 0);
 	int width = vsapi->getFrameWidth(src, 0);
 	memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * vsapi->getFrameHeight(dst, 0));
-	pixel_t* lookup = new pixel_t[height * width / bits];
-	memset(lookup, 0, height * (width * sizeof(pixel_t)) / bits);
+	std::vector<uint8_t> lookup((height * width + 7) >> 3, 0);
 
 	std::deque<Coordinates> coordinates;
 	std::vector<Coordinates> white_pixels;
@@ -21,7 +20,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			if (visited<pixel_t>(x, y, width, lookup, bits) || !is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
+			if (visited(x, y, width, lookup) || !is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
 				continue;
 			}
 			coordinates.clear();
@@ -29,7 +28,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 
 			coordinates.emplace_back(x, y);
 			white_pixels.emplace_back(x, y);
-			visit<pixel_t>(x, y, width, lookup, bits);
+			visit(x, y, width, lookup);
 
 			while (!coordinates.empty()) {
 				/* pop first coordinates (BFS) */
@@ -40,11 +39,11 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 					int i = current.first + directions[dir].first;
 					int j = current.second + directions[dir].second;
 					if (i >= 0 && i < width && j >= 0 && j < height &&
-						!visited<pixel_t>(i, j, width, lookup, bits) &&
+						!visited(i, j, width, lookup) &&
 						is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
 						coordinates.emplace_back(i, j);
 						white_pixels.emplace_back(i, j);
-						visit<pixel_t>(i, j, width, lookup, bits);
+						visit(i, j, width, lookup);
 					}
 				}
 			}
@@ -145,7 +144,6 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 			}
 		}
 	}
-	delete[] lookup;
 }
 
 static const VSFrame* VS_CC TMCGetFrame(int n, int activationReason, void* instanceData, void** frameData, VSFrameContext* frameCtx, VSCore* core, const VSAPI* vsapi) {
