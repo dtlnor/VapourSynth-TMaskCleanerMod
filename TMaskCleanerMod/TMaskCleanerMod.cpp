@@ -1,6 +1,6 @@
 #include "shared.h"
 
-template<int filter_mode, bool binarize, bool keep_less, typename pixel_t>
+template<int filter_mode, bool binarize, bool reverse, typename pixel_t>
 void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, const VSAPI* vsapi) {
 	const pixel_t* srcptr = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, 0));
 	pixel_t* VS_RESTRICT dstptr = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, 0));
@@ -108,7 +108,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 				component_value = max_y - min_y + 1;
 			}
 
-			if constexpr (!keep_less) {
+			if constexpr (!reverse) {
 				if (component_value >= d->length) {
 					if ((d->fade == 0) || (component_value - d->length > d->fade)) {
 						for (const auto& pixel : white_pixels) {
@@ -231,9 +231,9 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (err)
 			connectivity = 8;
 
-		auto keep_less = static_cast<unsigned int>(vsapi->mapGetInt(in, "keepless", 0, &err));
+		auto reverse = static_cast<unsigned int>(vsapi->mapGetInt(in, "reverse", 0, &err));
 		if (err)
-			keep_less = 0;
+			reverse = 0;
 
 		auto mode = static_cast<int>(vsapi->mapGetInt(in, "mode", 0, &err));
 		if (err)
@@ -248,8 +248,8 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (connectivity != 4 && connectivity != 8)
 			throw std::string("connectivity must be either 4 or 8.");
 
-		if (keep_less != 0 && keep_less != 1)
-			throw std::string("keepless must be either 0 or 1.");
+		if (reverse != 0 && reverse != 1)
+			throw std::string("reverse must be either 0 or 1.");
 
 		if (mode < 0 || mode > 8)
 			throw std::string("mode must be in the range [0, 8].");
@@ -263,12 +263,12 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 			d->dir_count = 8;
 		}
 
-		// binarize, keep_less, 8/16-bit
+		// binarize, reverse, 8/16-bit
 		int selector = (d->vi->format.bytesPerSample == 1 ? 0 : 1) |
-			(keep_less ? 2 : 0) |
+			(reverse ? 2 : 0) |
 			(binarize ? 4 : 0);
 
-		//                              <binarize, keep_less, 8/16>
+		//                              <binarize, reverse, 8/16>
 		switch (selector) {
 			case 0b000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
 			case 0b001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;

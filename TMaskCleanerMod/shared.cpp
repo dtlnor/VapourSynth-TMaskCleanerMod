@@ -16,7 +16,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 		"fade:int:opt;"
 		"binarize:int:opt;"
 		"connectivity:int:opt;"
-		"keepless:int:opt;"
+		"reverse:int:opt;"
 		"mode:int:opt;",
 		"clip:vnode;",
 		TMCCreate, nullptr, plugin);
