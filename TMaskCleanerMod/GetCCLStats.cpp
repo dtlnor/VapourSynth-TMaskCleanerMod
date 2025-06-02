@@ -163,7 +163,7 @@ void VS_CC CCSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
 			throw std::string("only constant format 8-16 bits integer input supported.");
 
-		d->thresh = static_cast<float>(vsapi->mapGetInt(in, "thresh", 0, &err));
+		d->thresh = static_cast<unsigned int>(vsapi->mapGetInt(in, "thresh", 0, &err));
 		if (err)
 			d->thresh = 235;
 

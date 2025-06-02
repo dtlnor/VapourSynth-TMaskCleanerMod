@@ -211,15 +211,15 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
 			throw std::string("only constant format 8-16 bits integer input supported.");
 
-		d->length = static_cast<float>(vsapi->mapGetInt(in, "length", 0, &err));
+		d->length = static_cast<unsigned int>(vsapi->mapGetInt(in, "length", 0, &err));
 		if (err)
 			d->length = 5;
 
-		d->thresh = static_cast<float>(vsapi->mapGetInt(in, "thresh", 0, &err));
+		d->thresh = static_cast<unsigned int>(vsapi->mapGetInt(in, "thresh", 0, &err));
 		if (err)
 			d->thresh = 235 << (d->vi->format.bitsPerSample - 8);
 
-		d->fade = static_cast<float>(vsapi->mapGetInt(in, "fade", 0, &err));
+		d->fade = static_cast<unsigned int>(vsapi->mapGetInt(in, "fade", 0, &err));
 		if (err)
 			d->fade = 0;
 
@@ -231,7 +231,7 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (err)
 			connectivity = 8;
 
-		auto reverse = static_cast<unsigned int>(vsapi->mapGetInt(in, "reverse", 0, &err));
+		auto reverse = static_cast<bool>(vsapi->mapGetInt(in, "reverse", 0, &err));
 		if (err)
 			reverse = 0;
 
@@ -247,9 +247,6 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 
 		if (connectivity != 4 && connectivity != 8)
 			throw std::string("connectivity must be either 4 or 8.");
-
-		if (reverse != 0 && reverse != 1)
-			throw std::string("reverse must be either 0 or 1.");
 
 		if (mode < 0 || mode > 8)
 			throw std::string("mode must be in the range [0, 8].");
