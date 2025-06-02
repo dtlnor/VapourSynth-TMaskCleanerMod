@@ -13,6 +13,7 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
+	const auto thresh = d->thresh;
 
 	auto num_labels = 0;
 	std::vector<int64_t> areas;
@@ -37,7 +38,7 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			if (!is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
+			if (!is_white<pixel_t>(srcptr[srcStride * y + x], thresh)) {
 				bg_pixel_count++;
 				bg_sum_x += x;
 				bg_sum_y += y;
@@ -70,7 +71,7 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 					const int j = current.second + directions[dir].second;
 					if (i >= 0 && i < width && j >= 0 && j < height &&
 						!visited(i, j, width, lookup) &&
-						is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+						is_white<pixel_t>(srcptr[j * srcStride + i], thresh)) {
 						coordinates.emplace_back(i, j);
 						visit(i, j, width, lookup);
 

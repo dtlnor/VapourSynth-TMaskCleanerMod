@@ -41,10 +41,11 @@ inline void visit(int x, int y, int width, std::vector<uint8_t>& lookup) {
 	lookup[normal_pos >> 3] |= (1 << (normal_pos & 7));
 }
 
-constexpr Coordinates directions4[4] = { {0, -1}, {-1, 0}, {1, 0}, {0, 1} };
+constexpr Coordinates directions4[4] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1} };
 constexpr Coordinates directions8[8] = {
-	{0, -1}, {-1, 0}, {1, 0}, {0, 1},
-	{-1, -1}, {1, -1}, {-1, 1}, {1, 1}
+	{-1, -1}, {0, -1}, {1, -1},
+	{-1, 0},           {1, 0},
+	{-1, 1},  {0, 1},  {1, 1}
 };
 
 template<bool binarize, bool reverse, typename pixel_t>

@@ -19,10 +19,12 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
 	const double fade_inv = d->fade > 0 ? 1.0f / d->fade : 0.0f;
+	const auto thresh = d->thresh;
+	const auto length = d->length;
 
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			if (visited(x, y, width, lookup) || !is_white<pixel_t>(srcptr[srcStride * y + x], d->thresh)) {
+			if (visited(x, y, width, lookup) || !is_white<pixel_t>(srcptr[srcStride * y + x], thresh)) {
 				continue;
 			}
 			coordinates.clear();
@@ -38,11 +40,11 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 				coordinates.pop_front();
 
 				for (int dir = 0; dir < dir_count; dir++) {
-					int i = current.first + directions[dir].first;
-					int j = current.second + directions[dir].second;
+					const int i = current.first + directions[dir].first;
+					const int j = current.second + directions[dir].second;
 					if (i >= 0 && i < width && j >= 0 && j < height &&
 						!visited(i, j, width, lookup) &&
-						is_white<pixel_t>(srcptr[j * srcStride + i], d->thresh)) {
+						is_white<pixel_t>(srcptr[j * srcStride + i], thresh)) {
 						coordinates.emplace_back(i, j);
 						white_pixels.emplace_back(i, j);
 						visit(i, j, width, lookup);
@@ -109,8 +111,8 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 			}
 
 			if constexpr (!reverse) {
-				if (component_value >= d->length) {
-					if ((d->fade == 0) || (component_value - d->length > d->fade)) {
+				if (component_value >= length) {
+					if ((d->fade == 0) || (component_value - length > d->fade)) {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
@@ -126,19 +128,19 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
-								dstptr[dst_pos] = peak * (component_value - d->length) * fade_inv;
+								dstptr[dst_pos] = peak * (component_value - length) * fade_inv;
 							}
 							else {
 								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos] * (component_value - d->length) * fade_inv;
+								dstptr[dst_pos] = srcptr[src_pos] * (component_value - length) * fade_inv;
 							}
 						}
 					}
 				}
 			}
 			else {
-				if (component_value <= d->length) {
-					if ((d->fade == 0) || (d->length - component_value > d->fade)) {
+				if (component_value <= length) {
+					if ((d->fade == 0) || (length - component_value > d->fade)) {
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
@@ -154,11 +156,11 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 						for (const auto& pixel : white_pixels) {
 							const auto dst_pos = dstStride * pixel.second + pixel.first;
 							if constexpr (binarize) {
-								dstptr[dst_pos] = peak * (d->length - component_value) * fade_inv;
+								dstptr[dst_pos] = peak * (length - component_value) * fade_inv;
 							}
 							else {
 								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos] * (d->length - component_value) * fade_inv;
+								dstptr[dst_pos] = srcptr[src_pos] * (length - component_value) * fade_inv;
 							}
 						}
 					}
@@ -267,15 +269,15 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 
 		//                              <binarize, reverse, 8/16>
 		switch (selector) {
-			case 0b000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
-			case 0b001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
-			case 0b010: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
-			case 0b011: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
-			case 0b100: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
-			case 0b101: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
-			case 0b110: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
-			case 0b111: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
-			default: throw std::string("Unsupported combination of parameters");
+		case 0b000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
+		case 0b001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
+		case 0b010: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
+		case 0b011: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
+		case 0b100: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
+		case 0b101: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
+		case 0b110: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
+		case 0b111: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
+		default: throw std::string("Unsupported combination of parameters");
 		}
 	}
 	catch (const std::string& error) {
