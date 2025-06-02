@@ -217,7 +217,7 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 
 		d->thresh = static_cast<float>(vsapi->mapGetInt(in, "thresh", 0, &err));
 		if (err)
-			d->thresh = 235;
+			d->thresh = 235 << (d->vi->format.bitsPerSample - 8);
 
 		d->fade = static_cast<float>(vsapi->mapGetInt(in, "fade", 0, &err));
 		if (err)

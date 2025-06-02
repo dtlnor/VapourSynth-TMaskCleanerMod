@@ -58,7 +58,7 @@ f.props.get('_CCLStatAreas', None)[1:]
     Discards connected areas that less than `length` pixels. (Use `reverse` to discard areas larger than `length`)
 
 - **thresh** = `235`  
-    Binarize threshold. Discards pixels with values less than `thresh` before applying the `length` filter. Range: 0-255 for 8-bit input, 0-65535 for 16-bit input.
+    Binarize threshold. Discards pixels with values less than `thresh` before applying the `length` filter. Range: 0-255 for 8-bit input, 0-65535 for 16-bit input. Default `235 << (bitsPerSample - 8)`
 
 - **fade** = `0`  
     Controls gradual transition from 0 to 255:
