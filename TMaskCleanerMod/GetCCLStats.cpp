@@ -1,5 +1,7 @@
 #include "shared.h"
 
+#define LABEL_CAPACITY 512
+
 template<typename pixel_t>
 void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, const VSAPI* vsapi) {
 	const pixel_t* srcptr = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, 0));
@@ -7,29 +9,45 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 	int height = vsapi->getFrameHeight(src, 0);
 	int width = vsapi->getFrameWidth(src, 0);
 	VSMap* props = vsapi->getFramePropertiesRW(dst);
-	std::vector<uint8_t> lookup((height * width + 7) >> 3, 0);
 
-	std::deque<Coordinates> coordinates;
+	thread_local std::vector<uint8_t> lookup;
+	const size_t lookup_size = (height * width + 7) >> 3;
+	if (lookup.size() != lookup_size) {
+		lookup.resize(lookup_size, 0);
+	} else {
+		std::fill(lookup.begin(), lookup.end(), 0);
+	}
+
+	thread_local std::deque<Coordinates> coordinates;
 
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
 	const auto thresh = d->thresh;
 
 	auto num_labels = 0;
-	std::vector<int64_t> areas;
-	std::vector<int64_t> lefts;
-	std::vector<int64_t> tops;
-	std::vector<int64_t> widths;
-	std::vector<int64_t> heights;
-	std::vector<double> centroids_x;
-	std::vector<double> centroids_y;
-	areas.reserve(512);
-	lefts.reserve(512);
-	tops.reserve(512);
-	widths.reserve(512);
-	heights.reserve(512);
-	centroids_x.reserve(512);
-	centroids_y.reserve(512);
+	thread_local std::vector<int64_t> areas;
+	thread_local std::vector<int64_t> lefts;
+	thread_local std::vector<int64_t> tops;
+	thread_local std::vector<int64_t> widths;
+	thread_local std::vector<int64_t> heights;
+	thread_local std::vector<double> centroids_x;
+	thread_local std::vector<double> centroids_y;
+	areas.clear();
+	lefts.clear();
+	tops.clear();
+	widths.clear();
+	heights.clear();
+	centroids_x.clear();
+	centroids_y.clear();
+	if (areas.capacity() < LABEL_CAPACITY) {
+		areas.reserve(LABEL_CAPACITY);
+		lefts.reserve(LABEL_CAPACITY);
+		tops.reserve(LABEL_CAPACITY);
+		widths.reserve(LABEL_CAPACITY);
+		heights.reserve(LABEL_CAPACITY);
+		centroids_x.reserve(LABEL_CAPACITY);
+		centroids_y.reserve(LABEL_CAPACITY);
+	}
 
 	unsigned int bg_pixel_count = 0;
 	double bg_sum_x = 0.0, bg_sum_y = 0.0;

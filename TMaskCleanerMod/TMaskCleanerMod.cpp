@@ -8,14 +8,21 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	const int dstStride = vsapi->getStride(dst, 0) / sizeof(pixel_t);
 	int height = vsapi->getFrameHeight(src, 0);
 	int width = vsapi->getFrameWidth(src, 0);
-	memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * vsapi->getFrameHeight(dst, 0));
-	std::vector<uint8_t> lookup((height * width + 7) >> 3, 0);
-	const auto peak = (1 << bits) - 1;
+	memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * height);
 
-	std::deque<Coordinates> coordinates;
-	std::vector<Coordinates> white_pixels;
+	thread_local std::vector<uint8_t> lookup;
+	const size_t lookup_size = (height * width + 7) >> 3;
+	if (lookup.size() != lookup_size) {
+		lookup.resize(lookup_size, 0);
+	} else {
+		std::fill(lookup.begin(), lookup.end(), 0);
+	}
+
+	thread_local std::deque<Coordinates> coordinates;
+	thread_local std::vector<Coordinates> white_pixels;
 	white_pixels.reserve(4096);
 
+	const auto peak = (1 << bits) - 1;
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
 	const double fade_inv = d->fade > 0 ? 1.0f / d->fade : 0.0f;
