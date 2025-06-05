@@ -73,9 +73,10 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <Parallelization>true</Parallelization>
-      <OptimizeForWindowsApplication>true</OptimizeForWindowsApplication>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <GenerateAlternateCodePaths>AVX2</GenerateAlternateCodePaths>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
