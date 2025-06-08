@@ -7,7 +7,6 @@
 #include "VapourSynth4.h"
 #include "VSHelper4.h"
 #include <string>
-#include <deque>
 #include <numeric>
 
 struct TMCData;

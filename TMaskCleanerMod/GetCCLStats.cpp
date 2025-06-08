@@ -18,7 +18,8 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 		std::fill(lookup.begin(), lookup.end(), 0);
 	}
 
-	thread_local std::deque<Coordinates> coordinates;
+	thread_local std::vector<Coordinates> coordinates;
+	coordinates.reserve(4096);
 
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
@@ -80,9 +81,9 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 			visit(x, y, width, lookup);
 
 			while (!coordinates.empty()) {
-				/* pop first coordinates (BFS) */
-				Coordinates current = coordinates.front();
-				coordinates.pop_front();
+				/* pop last coordinates */
+				Coordinates current = coordinates.back();
+				coordinates.pop_back();
 
 				for (int dir = 0; dir < dir_count; dir++) {
 					const int i = current.first + directions[dir].first;

@@ -18,8 +18,9 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 		std::fill(lookup.begin(), lookup.end(), 0);
 	}
 
-	thread_local std::deque<Coordinates> coordinates;
+	thread_local std::vector<Coordinates> coordinates;
 	thread_local std::vector<Coordinates> white_pixels;
+	coordinates.reserve(4096);
 	white_pixels.reserve(4096);
 
 	const auto peak = (1 << bits) - 1;
@@ -42,9 +43,9 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 			visit(x, y, width, lookup);
 
 			while (!coordinates.empty()) {
-				/* pop first coordinates (BFS) */
-				Coordinates current = coordinates.front();
-				coordinates.pop_front();
+				/* pop last coordinates */
+				Coordinates current = coordinates.back();
+				coordinates.pop_back();
 
 				for (int dir = 0; dir < dir_count; dir++) {
 					const int i = current.first + directions[dir].first;
