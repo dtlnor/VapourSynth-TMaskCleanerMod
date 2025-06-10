@@ -26,8 +26,8 @@ struct TMCData {
 };
 
 template<typename pixel_t>
-inline bool is_white(pixel_t value, unsigned int thresh) {
-	return value >= thresh;
+inline bool is_black(pixel_t value, unsigned int thresh) {
+	return value < thresh;
 }
 
 inline bool visited(int x, int y, int width, const std::vector<uint8_t>& lookup) {

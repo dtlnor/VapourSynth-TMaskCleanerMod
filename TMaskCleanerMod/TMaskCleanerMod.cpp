@@ -5,10 +5,9 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	const pixel_t* srcptr = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, 0));
 	pixel_t* VS_RESTRICT dstptr = reinterpret_cast<pixel_t*>(vsapi->getWritePtr(dst, 0));
 	const int srcStride = vsapi->getStride(src, 0) / sizeof(pixel_t);
-	const int dstStride = vsapi->getStride(dst, 0) / sizeof(pixel_t);
 	int height = vsapi->getFrameHeight(src, 0);
 	int width = vsapi->getFrameWidth(src, 0);
-	memset(dstptr, 0, (dstStride * sizeof(pixel_t)) * height);
+	memset(dstptr, 0, (srcStride * sizeof(pixel_t)) * height);
 
 	thread_local std::vector<uint8_t> lookup;
 	const size_t lookup_size = (height * width + 7) >> 3;
@@ -26,15 +25,16 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	const auto peak = (1 << bits) - 1;
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
-	const double fade_inv = d->fade > 0 ? 1.0f / d->fade : 0.0f;
 	const auto thresh = d->thresh;
 	const auto length = d->length;
+	const auto fade = d->fade;
+	const double fade_inv = fade > 0 ? 1.0f / fade : 0.0f;
 
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			if (visited(x, y, width, lookup) || !is_white<pixel_t>(srcptr[srcStride * y + x], thresh)) {
-				continue;
-			}
+			if (visited(x, y, width, lookup)) continue;
+			if (is_black<pixel_t>(srcptr[srcStride * y + x], thresh)) continue;
+
 			coordinates.clear();
 			white_pixels.clear();
 
@@ -42,6 +42,7 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 			white_pixels.emplace_back(x, y);
 			visit(x, y, width, lookup);
 
+			int min_x = x, min_y = y, max_x = x, max_y = y;
 			while (!coordinates.empty()) {
 				/* pop last coordinates */
 				Coordinates current = coordinates.back();
@@ -50,127 +51,97 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 				for (int dir = 0; dir < dir_count; dir++) {
 					const int i = current.first + directions[dir].first;
 					const int j = current.second + directions[dir].second;
-					if (i >= 0 && i < width && j >= 0 && j < height &&
-						!visited(i, j, width, lookup) &&
-						is_white<pixel_t>(srcptr[j * srcStride + i], thresh)) {
-						coordinates.emplace_back(i, j);
-						white_pixels.emplace_back(i, j);
-						visit(i, j, width, lookup);
+
+					if (i < 0 || i >= width || j < 0 || j >= height) continue;
+					if (visited(i, j, width, lookup)) continue;
+					if (is_black<pixel_t>(srcptr[srcStride * j + i], thresh)) continue;
+
+					coordinates.emplace_back(i, j);
+					white_pixels.emplace_back(i, j);
+					visit(i, j, width, lookup);
+
+					if constexpr (filter_mode == 1) { // centriod_x
+						max_x += i;
+					}
+					else if constexpr (filter_mode == 2) { // centriod_y
+						max_y += j;
+					}
+					else if constexpr (filter_mode == 3) { // min_x
+						min_x = std::min(min_x, i);
+					}
+					else if constexpr (filter_mode == 4) { // min_y
+						min_y = std::min(min_y, j);
+					}
+					else if constexpr (filter_mode == 5) { // max_x
+						max_x = std::max(max_x, i);
+					}
+					else if constexpr (filter_mode == 6) { // max_y
+						max_y = std::max(max_y, j);
+					}
+					else if constexpr (filter_mode == 7) { // width
+						min_x = std::min(min_x, i);
+						max_x = std::max(max_x, i);
+					}
+					else if constexpr (filter_mode == 8) { // height
+						min_y = std::min(min_y, j);
+						max_y = std::max(max_y, j);
 					}
 				}
 			}
 
 			size_t component_value;
-			if constexpr (filter_mode == 0) {
-				// pixel count
+			if constexpr (filter_mode == 0) { // pixel count
 				component_value = white_pixels.size();
 			}
-			else if constexpr (filter_mode == 1) {
-				// centriod_x
-				component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0,
-					[](double sum, const Coordinates& p) { return sum + p.first; }) / white_pixels.size());
+			else if constexpr (filter_mode == 1) { // centriod_x
+				component_value = max_x / white_pixels.size();
 			}
-			else if constexpr (filter_mode == 2) {
-				// centriod_y
-				component_value = static_cast<size_t>(std::accumulate(white_pixels.begin(), white_pixels.end(), 0.0,
-					[](double sum, const Coordinates& p) { return sum + p.second; }) / white_pixels.size());
+			else if constexpr (filter_mode == 2) { // centriod_y
+				component_value = max_y / white_pixels.size();
 			}
-			else if constexpr (filter_mode == 3) {
-				// min_x
-				auto min_x = std::min_element(white_pixels.begin(), white_pixels.end(),
-					[](const Coordinates& a, const Coordinates& b) { return a.first < b.first; });
-				component_value = min_x->first;
+			else if constexpr (filter_mode == 3) { // min_x
+				component_value = min_x;
 			}
-			else if constexpr (filter_mode == 4) {
-				// min_y
-				auto min_y = std::min_element(white_pixels.begin(), white_pixels.end(),
-					[](const Coordinates& a, const Coordinates& b) { return a.second < b.second; });
-				component_value = min_y->second;
+			else if constexpr (filter_mode == 4) { // min_y
+				component_value = min_y;
 			}
-			else if constexpr (filter_mode == 5) {
-				// max_x
-				auto max_x = std::max_element(white_pixels.begin(), white_pixels.end(),
-					[](const Coordinates& a, const Coordinates& b) { return a.first < b.first; });
-				component_value = max_x->first;
+			else if constexpr (filter_mode == 5) { // max_x
+				component_value = max_x;
 			}
-			else if constexpr (filter_mode == 6) {
-				// max_y
-				auto max_y = std::max_element(white_pixels.begin(), white_pixels.end(),
-					[](const Coordinates& a, const Coordinates& b) { return a.second < b.second; });
-				component_value = max_y->second;
+			else if constexpr (filter_mode == 6) { // max_y
+				component_value = max_y;
 			}
-			else if constexpr (filter_mode == 7) {
-				// width
-				int min_x = width, max_x = -1;
-				for (const auto& pixel : white_pixels) {
-					min_x = std::min(min_x, pixel.first);
-					max_x = std::max(max_x, pixel.first);
-				}
+			else if constexpr (filter_mode == 7) { // width
 				component_value = max_x - min_x + 1;
 			}
-			else if constexpr (filter_mode == 8) {
-				// height
-				int min_y = height, max_y = -1;
-				for (const auto& pixel : white_pixels) {
-					min_y = std::min(min_y, pixel.second);
-					max_y = std::max(max_y, pixel.second);
-				}
+			else if constexpr (filter_mode == 8) { // height
 				component_value = max_y - min_y + 1;
 			}
 
+			bool should_draw;
+			double fade_factor = 1.0;
 			if constexpr (!reverse) {
-				if (component_value >= length) {
-					if ((d->fade == 0) || (component_value - length > d->fade)) {
-						for (const auto& pixel : white_pixels) {
-							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							if constexpr (binarize) {
-								dstptr[dst_pos] = peak;
-							}
-							else {
-								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos];
-							}
-						}
-					}
-					else {
-						for (const auto& pixel : white_pixels) {
-							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							if constexpr (binarize) {
-								dstptr[dst_pos] = peak * (component_value - length) * fade_inv;
-							}
-							else {
-								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos] * (component_value - length) * fade_inv;
-							}
-						}
-					}
+				should_draw = (component_value >= length);
+				if (should_draw && fade > 0 && (component_value - length <= fade)) {
+					fade_factor = (component_value - length) * fade_inv;
 				}
 			}
 			else {
-				if (component_value <= length) {
-					if ((d->fade == 0) || (length - component_value > d->fade)) {
-						for (const auto& pixel : white_pixels) {
-							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							if constexpr (binarize) {
-								dstptr[dst_pos] = peak;
-							}
-							else {
-								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos];
-							}
-						}
+				should_draw = (component_value <= length);
+				if (should_draw && fade > 0 && (length - component_value <= fade)) {
+					fade_factor = (length - component_value) * fade_inv;
+				}
+			}
+
+			if (should_draw) {
+				for (const auto& pixel : white_pixels) {
+					const auto pos = srcStride * pixel.second + pixel.first;
+
+					if constexpr (binarize) {
+						dstptr[pos] = peak * fade_factor;
 					}
 					else {
-						for (const auto& pixel : white_pixels) {
-							const auto dst_pos = dstStride * pixel.second + pixel.first;
-							if constexpr (binarize) {
-								dstptr[dst_pos] = peak * (length - component_value) * fade_inv;
-							}
-							else {
-								const auto src_pos = srcStride * pixel.second + pixel.first;
-								dstptr[dst_pos] = srcptr[src_pos] * (length - component_value) * fade_inv;
-							}
-						}
+						dstptr[pos] = srcptr[pos] * fade_factor;
 					}
 				}
 			}

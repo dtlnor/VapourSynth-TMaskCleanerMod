@@ -57,7 +57,7 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			if (!is_white<pixel_t>(srcptr[srcStride * y + x], thresh)) {
+			if (is_black<pixel_t>(srcptr[srcStride * y + x], thresh)) {
 				bg_pixel_count++;
 				bg_sum_x += x;
 				bg_sum_y += y;
@@ -67,9 +67,8 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 				bg_max_y = std::max(bg_max_y, y);
 				continue;
 			}
-			if (visited(x, y, width, lookup)) {
-				continue;
-			}
+			if (visited(x, y, width, lookup)) continue;
+
 			coordinates.clear();
 
 			unsigned int pixel_count = 1;
@@ -88,20 +87,22 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 				for (int dir = 0; dir < dir_count; dir++) {
 					const int i = current.first + directions[dir].first;
 					const int j = current.second + directions[dir].second;
-					if (i >= 0 && i < width && j >= 0 && j < height &&
-						!visited(i, j, width, lookup) &&
-						is_white<pixel_t>(srcptr[j * srcStride + i], thresh)) {
-						coordinates.emplace_back(i, j);
-						visit(i, j, width, lookup);
 
-						pixel_count++;
-						sum_x += i;
-						sum_y += j;
-						min_x = std::min(min_x, i);
-						max_x = std::max(max_x, i);
-						min_y = std::min(min_y, j);
-						max_y = std::max(max_y, j);
-					}
+					if (i < 0 || i >= width || j < 0 || j >= height) continue;
+					if (visited(i, j, width, lookup)) continue;
+					if (is_black<pixel_t>(srcptr[j * srcStride + i], thresh)) continue;
+
+					coordinates.emplace_back(i, j);
+					visit(i, j, width, lookup);
+
+					pixel_count++;
+					sum_x += i;
+					sum_y += j;
+					min_x = std::min(min_x, i);
+					max_x = std::max(max_x, i);
+					min_y = std::min(min_y, j);
+					max_y = std::max(max_y, j);
+					
 				}
 			}
 
