@@ -26,5 +26,5 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI
 		"thresh:int:opt;"
 		"connectivity:int:opt;",
 		"clip:vnode;",
-		CCSCreate, nullptr, plugin);
+		CCLSCreate, nullptr, plugin);
 }

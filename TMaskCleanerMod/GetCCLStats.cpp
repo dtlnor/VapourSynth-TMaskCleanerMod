@@ -3,7 +3,7 @@
 #define LABEL_CAPACITY 512
 
 template<typename pixel_t>
-void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, const VSAPI* vsapi) {
+void process_ccls(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, const VSAPI* vsapi) {
 	const pixel_t* srcptr = reinterpret_cast<const pixel_t*>(vsapi->getReadPtr(src, 0));
 	const int srcStride = vsapi->getStride(src, 0) / sizeof(pixel_t);
 	int height = vsapi->getFrameHeight(src, 0);
@@ -141,7 +141,7 @@ void process_ccs(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, c
 	vsapi->mapSetInt(props, "_CCLStatNumLabels", num_labels, maReplace);
 }
 
-static const VSFrame* VS_CC CCSGetFrame(int n, int activationReason, void* instanceData, void** frameData, VSFrameContext* frameCtx, VSCore* core, const VSAPI* vsapi) {
+static const VSFrame* VS_CC CCLSGetFrame(int n, int activationReason, void* instanceData, void** frameData, VSFrameContext* frameCtx, VSCore* core, const VSAPI* vsapi) {
 	TMCData* d = static_cast<TMCData*>(instanceData);
 
 	if (activationReason == arInitial) {
@@ -173,7 +173,7 @@ static const VSFrame* VS_CC CCSGetFrame(int n, int activationReason, void* insta
 	return nullptr;
 }
 
-void VS_CC CCSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi) {
+void VS_CC CCLSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, const VSAPI* vsapi) {
 	auto d{ std::make_unique<TMCData>() };
 	int err{ 0 };
 
@@ -208,19 +208,19 @@ void VS_CC CCSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		}
 
 		if (d->vi->format.bytesPerSample == 1) {
-			d->process_c_func = &process_ccs<uint8_t>;
+			d->process_c_func = &process_ccls<uint8_t>;
 		}
 		else if (d->vi->format.bytesPerSample == 2) {
-			d->process_c_func = &process_ccs<uint16_t>;
+			d->process_c_func = &process_ccls<uint16_t>;
 		}
 	}
 	catch (const std::string& error) {
-		vsapi->mapSetError(out, ("GetCCStats: " + error).c_str());
+		vsapi->mapSetError(out, ("GetCCLStats: " + error).c_str());
 		vsapi->freeNode(d->node);
 		return;
 	}
 
 	VSFilterDependency deps[] = { {d->node, rpStrictSpatial} };
-	vsapi->createVideoFilter(out, "GetCCStats", d->vi, CCSGetFrame, FilterFree, fmParallel, deps, 1, d.get(), core);
+	vsapi->createVideoFilter(out, "GetCCLStats", d->vi, CCLSGetFrame, FilterFree, fmParallel, deps, 1, d.get(), core);
 	d.release();
 }
