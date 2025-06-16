@@ -19,7 +19,7 @@ core.tmcm.TMaskCleanerMod(clip clip, [int length, int thresh, int fade, bint bin
 tmcm.TMaskCleanerMod(clip, length=5, thresh=235, fade=0)
 ```
 
-Original plugin works only with 8 bit input (and only Y plane). Beatrice-Raws port should support 10-16 bit as well (only plane 0 will be processed, 1 and 2 will be copied).
+Original plugin works only with 8 bit input (and only Y plane). Beatrice-Raws port should support 10-16 bit as well, my mod adds 32bit float support on top of it (only plane 0 will be processed, 1 and 2 will be copied).
 
 This mod adds options inspired by OpenCV's CCL based on the Beatrice-Raws port.  
 See the [Syntax and Parameters](#syntax-and-parameters) section for details.
@@ -52,15 +52,16 @@ f.props.get('_CCLStatAreas', None)[1:]
 ## Syntax and Parameters
 
 - **clip**  
-    Input clip. Supports 8-16 bit Gray/YUV formats. For YUV input, only plane 0 is processed; planes 1 and 2 are copied.
+    Input clip. Supports 8-16 bit integer / 32bit float Gray/YUV formats. For YUV input, only plane 0 is processed; planes 1 and 2 are copied.
 
 - **length** = `5`  
     Discards connected areas that less than `length` pixels. (Use `reverse` to discard areas larger than `length`)
 
 - **thresh** = `235`  
-    Binarize threshold. Discards pixels with values less than `thresh` before applying the `length` filter. Range: 0-255 for 8-bit input, 0-65535 for 16-bit input. Default `235 << (bitsPerSample - 8)`
+    Binarize threshold. Discards pixels with values less than `thresh` before applying the `length` filter. Range: 0-255 for 8-bit input, 0-65535 for 16-bit input etc. Default `235 << (bitsPerSample - 8)` for 8-16bit or `1.0` for 32bit float input.
 
 - **fade** = `0`  
+    Assume input clip is 8bit.  
     Controls gradual transition from 0 to 255:
     - Areas below `length` will be zeroed
     - Areas within [`length`, `length`+`fade`] will be assigned values gradually from 0 to 255
@@ -82,7 +83,7 @@ f.props.get('_CCLStatAreas', None)[1:]
     - `false`: Retain original luma values before applying `length` filter and fade multiplication.  
         This means the output of retained areas will have their values copied from the source clip.
     - `true`: Apply binarization with `thresh` before applying `length` filter and fade multiplication.  
-        This means the output of retained areas will be changed to peak value (255 for 8-bit, 65535 for 16-bit)
+        This means the output of retained areas will be changed to peak value (255 for 8-bit, 65535 for 16-bit, 1.0 for 32-bit float)
 
 - **connectivity** = `8`  
     Determines how connected components are identified:
@@ -90,7 +91,8 @@ f.props.get('_CCLStatAreas', None)[1:]
     - `4`: Include only adjacent pixels (top/bottom/left/right) in a 3×3 neighborhood
 
 - **reverse** = `false`  
-    Set to true to filter out objects larger than `length`.
+    Set to true to filter out objects larger than `length`.  
+    Assume input clip is 8bit.  
     - `false`:
         - Values **below** `length` will be zeroed
         - Values within [`length`, `length`+`fade`] will be assigned values gradually from **0** to **255**

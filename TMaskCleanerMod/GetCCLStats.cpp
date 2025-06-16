@@ -14,7 +14,8 @@ void process_ccls(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, 
 	const size_t lookup_size = (height * width + 7) >> 3;
 	if (lookup.size() != lookup_size) {
 		lookup.resize(lookup_size, 0);
-	} else {
+	}
+	else {
 		std::fill(lookup.begin(), lookup.end(), 0);
 	}
 
@@ -23,7 +24,7 @@ void process_ccls(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, 
 
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
-	const auto thresh = d->thresh;
+	const auto thresh = d->get_thresh<pixel_t>();
 
 	auto num_labels = 0;
 	thread_local std::vector<int64_t> areas;
@@ -102,7 +103,6 @@ void process_ccls(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, 
 					max_x = std::max(max_x, i);
 					min_y = std::min(min_y, j);
 					max_y = std::max(max_y, j);
-					
 				}
 			}
 
@@ -179,21 +179,30 @@ void VS_CC CCLSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core,
 
 	d->node = vsapi->mapGetNode(in, "clip", 0, nullptr);
 	d->vi = vsapi->getVideoInfo(d->node);
-
 	try {
-		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
-			throw std::string("only constant format 8-16 bits integer input supported.");
+		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
+			throw std::string("only constant format 8-16 bits integer, and f32 input supported.");
 
-		d->thresh = static_cast<unsigned int>(vsapi->mapGetInt(in, "thresh", 0, &err));
+		auto thresh = static_cast<float>(vsapi->mapGetFloat(in, "thresh", 0, &err));
 		if (err)
-			d->thresh = 235;
+			thresh = (d->vi->format.sampleType == stInteger) ? 235 << (d->vi->format.bitsPerSample - 8) : 1.0f;
+
+		if (d->vi->format.bytesPerSample == 1) {
+			d->set_thresh<uint8_t>(static_cast<uint8_t>(std::clamp(thresh, 0.0f, 255.0f)));
+		}
+		else if (d->vi->format.bytesPerSample == 2) {
+			d->set_thresh<uint16_t>(static_cast<uint16_t>(std::clamp(thresh, 0.0f, 65535.0f)));
+		}
+		else {
+			d->set_thresh<float>(thresh);
+		}
 
 		auto connectivity = static_cast<unsigned int>(vsapi->mapGetInt(in, "connectivity", 0, &err));
 		if (err)
 			connectivity = 8;
 
-		if (d->thresh <= 0)
-			throw std::string("thresh must be greater than zero.");
+		if (thresh <= 0 && d->vi->format.bytesPerSample < 4)
+			throw std::string("thresh must be greater than zero for 8-16bit clip.");
 
 		if (connectivity != 4 && connectivity != 8)
 			throw std::string("connectivity must be either 4 or 8.");
@@ -206,12 +215,14 @@ void VS_CC CCLSCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core,
 			d->directions = directions8;
 			d->dir_count = 8;
 		}
-
 		if (d->vi->format.bytesPerSample == 1) {
 			d->process_c_func = &process_ccls<uint8_t>;
 		}
 		else if (d->vi->format.bytesPerSample == 2) {
 			d->process_c_func = &process_ccls<uint16_t>;
+		}
+		else {
+			d->process_c_func = &process_ccls<float>;
 		}
 	}
 	catch (const std::string& error) {

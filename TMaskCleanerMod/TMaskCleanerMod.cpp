@@ -13,7 +13,8 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	const size_t lookup_size = (height * width + 7) >> 3;
 	if (lookup.size() != lookup_size) {
 		lookup.resize(lookup_size, 0);
-	} else {
+	}
+	else {
 		std::fill(lookup.begin(), lookup.end(), 0);
 	}
 
@@ -22,10 +23,10 @@ void process_c(const VSFrame* src, VSFrame* dst, int bits, const TMCData* d, con
 	coordinates.reserve(4096);
 	white_pixels.reserve(4096);
 
-	const auto peak = (1 << bits) - 1;
+	const auto peak = (sizeof(pixel_t) != 4) ? (1 << bits) - 1 : 1.0f;
 	const auto& directions = d->directions;
 	const int dir_count = d->dir_count;
-	const auto thresh = d->thresh;
+	const pixel_t thresh = d->get_thresh<pixel_t>();
 	const auto length = d->length;
 	const auto fade = d->fade;
 	const double fade_inv = fade > 0 ? 1.0f / fade : 0.0f;
@@ -189,16 +190,26 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 	d->vi = vsapi->getVideoInfo(d->node);
 
 	try {
-		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat))
-			throw std::string("only constant format 8-16 bits integer input supported.");
+		if (!vsh::isConstantVideoFormat(d->vi) || (d->vi->format.sampleType == stInteger && d->vi->format.bitsPerSample > 16) || (d->vi->format.sampleType == stFloat && d->vi->format.bitsPerSample != 32))
+			throw std::string("only constant format 8-16 bits integer, and f32 input supported.");
 
 		d->length = static_cast<unsigned int>(vsapi->mapGetInt(in, "length", 0, &err));
 		if (err)
 			d->length = 5;
 
-		d->thresh = static_cast<unsigned int>(vsapi->mapGetInt(in, "thresh", 0, &err));
+		auto thresh = static_cast<float>(vsapi->mapGetFloat(in, "thresh", 0, &err));
 		if (err)
-			d->thresh = 235 << (d->vi->format.bitsPerSample - 8);
+			thresh = (d->vi->format.sampleType == stInteger) ? 235 << (d->vi->format.bitsPerSample - 8) : 1.0f;
+
+		if (d->vi->format.bytesPerSample == 1) {
+			d->set_thresh<uint8_t>(static_cast<uint8_t>(std::clamp(thresh, 0.0f, 255.0f)));
+		}
+		else if (d->vi->format.bytesPerSample == 2) {
+			d->set_thresh<uint16_t>(static_cast<uint16_t>(std::clamp(thresh, 0.0f, 65535.0f)));
+		}
+		else {
+			d->set_thresh<float>(thresh);
+		}
 
 		d->fade = static_cast<unsigned int>(vsapi->mapGetInt(in, "fade", 0, &err));
 		if (err)
@@ -220,8 +231,11 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 		if (err)
 			mode = 0;
 
-		if (d->length <= 0 || d->thresh <= 0)
-			throw std::string("length and thresh must be greater than zero.");
+		if (d->length <= 0)
+			throw std::string("length must be greater than zero.");
+
+		if (thresh <= 0 && d->vi->format.bytesPerSample < 4)
+			throw std::string("thresh must be greater than zero for 8-16bit clip.");
 
 		if (d->fade < 0)
 			throw std::string("fade cannot be negative.");
@@ -241,21 +255,25 @@ void VS_CC TMCCreate(const VSMap* in, VSMap* out, void* userData, VSCore* core, 
 			d->dir_count = 8;
 		}
 
-		// binarize, reverse, 8/16-bit
-		int selector = (d->vi->format.bytesPerSample == 1 ? 0 : 1) |
-			(reverse ? 2 : 0) |
-			(binarize ? 4 : 0);
+		// binarize, reverse, data_bytes - 1
+		int selector = (d->vi->format.bytesPerSample - 1) |
+			(reverse << 2) |
+			(binarize << 3);
 
-		//                              <binarize, reverse, 8/16>
+		//                              <binarize, reverse, data_type>
 		switch (selector) {
-		case 0b000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
-		case 0b001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
-		case 0b010: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
-		case 0b011: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
-		case 0b100: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
-		case 0b101: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
-		case 0b110: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
-		case 0b111: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
+		case 0b0000: setProcessFunction<false, false, uint8_t>(d.get(), mode); break;
+		case 0b0001: setProcessFunction<false, false, uint16_t>(d.get(), mode); break;
+		case 0b0011: setProcessFunction<false, false, float>(d.get(), mode); break;
+		case 0b0100: setProcessFunction<false, true, uint8_t>(d.get(), mode); break;
+		case 0b0101: setProcessFunction<false, true, uint16_t>(d.get(), mode); break;
+		case 0b0111: setProcessFunction<false, true, float>(d.get(), mode); break;
+		case 0b1000: setProcessFunction<true, false, uint8_t>(d.get(), mode); break;
+		case 0b1001: setProcessFunction<true, false, uint16_t>(d.get(), mode); break;
+		case 0b1011: setProcessFunction<true, false, float>(d.get(), mode); break;
+		case 0b1100: setProcessFunction<true, true, uint8_t>(d.get(), mode); break;
+		case 0b1101: setProcessFunction<true, true, uint16_t>(d.get(), mode); break;
+		case 0b1111: setProcessFunction<true, true, float>(d.get(), mode); break;
 		default: throw std::string("Unsupported combination of parameters");
 		}
 	}

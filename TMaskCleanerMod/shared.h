@@ -8,6 +8,7 @@
 #include "VSHelper4.h"
 #include <string>
 #include <numeric>
+#include <algorithm>
 
 struct TMCData;
 
@@ -18,15 +19,45 @@ struct TMCData {
 	VSNode* node;
 	const VSVideoInfo* vi;
 	unsigned int length;
-	unsigned int thresh;
+	union {
+		uint8_t thresh_u8;
+		uint16_t thresh_u16;
+		float thresh_f32;
+	} thresh_typed;
 	unsigned int fade;
 	Process_c_Ptr process_c_func;
 	const Coordinates* directions;
 	int dir_count;
+
+	template<typename pixel_t>
+	pixel_t get_thresh() const {
+		if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+			return thresh_typed.thresh_u8;
+		}
+		else if constexpr (std::is_same_v<pixel_t, uint16_t>) {
+			return thresh_typed.thresh_u16;
+		}
+		else {
+			return thresh_typed.thresh_f32;
+		}
+	}
+
+	template<typename pixel_t>
+	void set_thresh(pixel_t value) {
+		if constexpr (std::is_same_v<pixel_t, uint8_t>) {
+			thresh_typed.thresh_u8 = value;
+		}
+		else if constexpr (std::is_same_v<pixel_t, uint16_t>) {
+			thresh_typed.thresh_u16 = value;
+		}
+		else {
+			thresh_typed.thresh_f32 = value;
+		}
+	}
 };
 
 template<typename pixel_t>
-inline bool is_black(pixel_t value, unsigned int thresh) {
+inline bool is_black(pixel_t value, pixel_t thresh) {
 	return value < thresh;
 }
 
